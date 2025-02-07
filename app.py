@@ -3,6 +3,7 @@ import os
 import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import re
 
 app = Flask(__name__)
 CORS(app)
@@ -27,6 +28,16 @@ user_requests = {}
 def load_instructions():
     with open('instructions.md','r',encoding='utf-8') as file:
         return file.read()
+# Use regex to extract Instagram profiles
+instagram_profiles = re.findall(r'\*\*([^*]+)\*\*: \[([^]]+)\]\((https://www.instagram.com/[^)]+)\)', content)
+
+# Convert the profile list into HTML format
+profile_html = "<ul>"
+for name, handle, url in instagram_profiles:
+    profile_html += f'<li><a href="{url}" target="_blank">{name}</a> - {handle}</li>'
+profile_html += "</ul>"
+
+return content + "\n" + profile_html
 
 instructions = load_instructions()
 
