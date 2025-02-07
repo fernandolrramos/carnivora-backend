@@ -114,6 +114,11 @@ def chat():
 
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
+
+            # Modify the AI response if it contains Instagram links, ensure they are wrapped in <a> tags
+            ai_response = ai_response.replace("instagram.com/", 'href="https://www.instagram.com/')
+            ai_response = ai_response.replace("\n", "<br>")  # To keep the line breaks
+            
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
