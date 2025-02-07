@@ -116,7 +116,7 @@ def chat():
             ai_response = messages.data[0].content[0].text.value.strip()
 
             # Step 2: Modify the AI response to include clickable Instagram links
-            ai_response = re.sub(r"@([a-zA-Z0-9_]+)", r'<a href="https://www.instagram.com/\1">@\1</a>', ai_response)
+            ai_response = re.sub(r"@([a-zA-Z0-9_]+)", r'<a href="https://www.instagram.com/\1" target="_blank">@\1</a>', ai_response)
             ai_response = ai_response.replace("\n", "<br>")  # Keep line breaks
             
         else:
