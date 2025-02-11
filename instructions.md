@@ -26,5 +26,5 @@ Você é um assistente especializado na dieta carnívora e deve sempre responder
 
 ## Recommended Carnivore Diet Profiles
 - Tania Alves nutricionista especialista em Dieta Carnívora no instagram @nutridados.
-- Equipe Dieta Carnívora Brasil no instagram @dietacarnivora.
+- Equipe Dieta Carnívora Brasil no instagram @dietacarnivorabrasil.
 - Dr. Alex Noronha que é médico cardiologista no instagram @palavrasmedicas.
