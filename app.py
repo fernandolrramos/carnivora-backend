@@ -8,7 +8,7 @@ import stripe
 
 try:
     import stripe
-    print("✅ Stripe is installed. Version:", stripe.__version__)
+    print("✅ Stripe is installed and can be imported.")
 except ImportError:
     print("❌ Stripe is NOT installed.")
 
