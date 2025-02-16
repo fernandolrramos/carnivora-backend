@@ -96,6 +96,8 @@ def chat():
             return jsonify({"response": "Erro: Nenhuma mensagem fornecida."}), 400
 
         user_message = data["message"].strip()
+        if len(user_message) > 200:
+           user_message = user_message[:200] + "..."
 
         # ✅ Ensure the message is correctly formatted
         if not user_message:
@@ -114,7 +116,11 @@ def chat():
         instructions = load_instructions()
 
         # ✅ Create a new OpenAI Assistant thread
-        thread = client.beta.threads.create()
+        thread = client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
+       # Limit to 3 most recent messages to avoid long conversations
+         messages = client.beta.threads.messages.list(thread_id=thread.id)
+         if len(messages.data) > 3:
+             messages.data = messages.data[-3:]
         print(f"✅ Thread created: {thread.id}")
 
         # ✅ Start AI processing with **improved** instructions
@@ -123,6 +129,7 @@ def chat():
             assistant_id=ASSISTANT_ID,
             instructions=f"Pergunta do usuário: {user_message}\n\n{instructions}",
             tool_choice="auto"
+            max_tokens=300  # Limits response size to save cost
         )
 
         print(f"⏳ Run started: {run.id}")
@@ -137,7 +144,7 @@ def chat():
             elif run_status.status == "failed":
                 return jsonify({"response": "⚠️ Erro ao processar a resposta do assistente."}), 500
 
-            time.sleep(2)
+            time.sleep(3)
 
         # ✅ Retrieve AI response
         messages = client.beta.threads.messages.list(thread_id=thread.id)
