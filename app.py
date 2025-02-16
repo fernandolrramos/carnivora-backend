@@ -100,19 +100,21 @@ def chat():
         instructions = load_instructions()
 
         # ✅ Create a new OpenAI Assistant thread and add user message
-        thread = client.beta.threads.create(
-            messages=[
-                {"role": "user", "content": user_message}
-            ]
-        )
+        thread = client.beta.threads.create()
         print(f"✅ Thread created: {thread.id}")
 
-        # ✅ Start AI processing
+        # ✅ Add user message to the thread
+        client.beta.threads.messages.create(
+            thread_id=thread.id,
+            role="user",
+            content=user_message
+        )
+
+        # ✅ Start AI processing (without `parameters`)
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
-            instructions=f"Pergunta do usuário: {user_message}\n\n{instructions}",
-            parameters={"tool_choice": "auto"}  # ✅ Corrected placement
+            instructions=f"Pergunta do usuário: {user_message}\n\n{instructions}"
         )
         print(f"⏳ Run started: {run.id}")
 
@@ -142,6 +144,7 @@ def chat():
 
     except Exception as e:
         return jsonify({"response": f"Erro interno do servidor: {str(e)}"}), 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
