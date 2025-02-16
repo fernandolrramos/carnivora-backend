@@ -4,7 +4,7 @@ import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import re
-#import stripe
+import stripe
 
 app = Flask(__name__)
 CORS(app)
@@ -37,12 +37,6 @@ CORS(app)
 #
 #   return jsonify({'status': 'success'}), 200
 #------------------------------------
-
-import stripe
-import os
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
 
 # ✅ Set Stripe API Key
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # Ensure this exists in Render Environment Variables
