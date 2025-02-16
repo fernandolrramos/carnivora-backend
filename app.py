@@ -99,18 +99,13 @@ def chat():
         # ✅ Load assistant instructions
         instructions = load_instructions()
 
-        # ✅ Create a new OpenAI Assistant thread and add user message
-        thread = client.beta.threads.create()
+        # ✅ Create a new OpenAI Assistant thread with user message
+        thread = client.beta.threads.create(
+            messages=[{"role": "user", "content": user_message}]
+        )
         print(f"✅ Thread created: {thread.id}")
 
-        # ✅ Add user message to the thread
-        client.beta.threads.messages.create(
-            thread_id=thread.id,
-            role="user",
-            content=user_message
-        )
-
-        # ✅ Start AI processing (without `parameters`)
+        # ✅ Start AI processing
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
@@ -126,8 +121,10 @@ def chat():
             if run_status.status == "completed":
                 break
             elif run_status.status == "requires_action":
-                return jsonify({"response": "⚠️ O assistente precisa de mais informações para responder."}), 400
+                print("⚠️ OpenAI is requesting additional action.")
+                return jsonify({"response": "⚠️ O assistente precisa de mais informações para responder. Tente reformular sua pergunta."}), 400
             elif run_status.status == "failed":
+                print("❌ OpenAI processing failed.")
                 return jsonify({"response": "⚠️ Erro ao processar a resposta do assistente."}), 500
 
             time.sleep(2)
@@ -143,8 +140,8 @@ def chat():
         return jsonify({"response": ai_response})
 
     except Exception as e:
+        print(f"❌ Internal Server Error: {str(e)}")
         return jsonify({"response": f"Erro interno do servidor: {str(e)}"}), 500
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
