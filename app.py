@@ -133,10 +133,12 @@ def chat():
         messages = client.beta.threads.messages.list(thread_id=thread.id)
         if messages.data:
             latest_message = sorted(messages.data, key=lambda x: x.created_at, reverse=True)[0]
-            ai_response = latest_message.content[0].text.value.strip()
+            
+            # ✅ Clean AI response by removing 【...†source】 patterns
+            ai_response = re.sub(r"【.*?†source】", "", latest_message.content[0].text.value).strip()
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
-
+        
         return jsonify({"response": ai_response})
 
     except Exception as e:
