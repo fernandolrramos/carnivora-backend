@@ -119,8 +119,8 @@ def chat():
         thread = client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
         # Limit to 3 most recent messages to avoid long conversations
         messages = client.beta.threads.messages.list(thread_id=thread.id)
-           if len(messages.data) > 3:
-              messages.data = messages.data[-3:]
+        if len(messages.data) > 3:
+           messages.data = messages.data[-3:]
         print(f"✅ Thread created: {thread.id}")
 
         # ✅ Start AI processing with **improved** instructions
