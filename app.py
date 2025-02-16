@@ -7,7 +7,7 @@ import re
 #import stripe
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "https://carnivora-frontend.vercel.app"}})
 
 #------------------------------------
 
