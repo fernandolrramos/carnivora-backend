@@ -29,14 +29,13 @@ CORS(app)
 #    except stripe.error.SignatureVerificationError:
 #        return jsonify({'error': 'Invalid signature'}), 400
 #
-#    # ✅ Handle successful checkout
+   # ✅ Handle successful checkout
 #    if event['type'] == 'checkout.session.completed':
 #       session = event['data']['object']
 #       print(f"✅ Payment received for {session['amount_total']} cents!")
 #       # TODO: Add logic to update the user’s subscription in your database
 #
-#    return jsonify({'status': 'success'}), 200
-
+#   return jsonify({'status': 'success'}), 200
 #------------------------------------
 
 # ✅ OpenAI API Key and Assistant ID
@@ -59,6 +58,16 @@ user_requests = {}
 def load_instructions():
     with open('instructions.md','r',encoding='utf-8') as file:
         return file.read()
+# Use regex to extract Instagram profiles
+#instagram_profiles = re.findall(r'\*\*([^*]+)\*\*: \[([^]]+)\]\((https://www.instagram.com/[^)]+)\)', content)
+
+# Convert the profile list into HTML format
+#profile_html = "<ul>"
+#for name, handle, url in instagram_profiles:
+#    profile_html += f'<li><a href="{url}" target="_blank">{name}</a> - {handle}</li>'
+#profile_html += "</ul>"
+
+#return content + "\n" + profile_html
 
 instructions = load_instructions()
 
@@ -82,35 +91,40 @@ def chat():
         print("Request Data:", raw_data)
 
         data = request.get_json(silent=True)
+
         if not data or "message" not in data:
             return jsonify({"response": "Erro: Nenhuma mensagem fornecida."}), 400
 
         user_message = data["message"].strip()
+
+        # ✅ Ensure the message is correctly formatted
         if not user_message:
             return jsonify({"response": "Erro: Mensagem vazia recebida."}), 400
 
         # ✅ Limit users to 50 requests per day
         if user_ip not in user_requests:
             user_requests[user_ip] = 0
+
         if user_requests[user_ip] >= 50:
             return jsonify({"response": "⚠️ Limite diário de 50 mensagens atingido. Tente novamente amanhã."}), 429
+
         user_requests[user_ip] += 1
 
-        # ✅ Load assistant instructions
+        # ✅ AI Assistant Instructions for Portuguese + Context Awareness
         instructions = load_instructions()
 
-        # ✅ Create a new OpenAI Assistant thread with user message
-        thread = client.beta.threads.create(
-            messages=[{"role": "user", "content": user_message}]
-        )
+        # ✅ Create a new OpenAI Assistant thread
+        thread = client.beta.threads.create()
         print(f"✅ Thread created: {thread.id}")
 
-        # ✅ Start AI processing
+        # ✅ Start AI processing with **improved** instructions
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
-            instructions=f"Pergunta do usuário: {user_message}\n\n{instructions}"
+            instructions=f"Pergunta do usuário: {user_message}\n\n{instructions}",
+            tool_choice="auto"
         )
+
         print(f"⏳ Run started: {run.id}")
 
         # ✅ Wait for AI response
@@ -120,29 +134,27 @@ def chat():
 
             if run_status.status == "completed":
                 break
-            elif run_status.status == "requires_action":
-                print("⚠️ OpenAI is requesting additional action.")
-                return jsonify({"response": "⚠️ O assistente precisa de mais informações para responder. Tente reformular sua pergunta."}), 400
             elif run_status.status == "failed":
-                print("❌ OpenAI processing failed.")
                 return jsonify({"response": "⚠️ Erro ao processar a resposta do assistente."}), 500
 
             time.sleep(2)
 
-        # ✅ Retrieve latest AI response
+        # ✅ Retrieve AI response
         messages = client.beta.threads.messages.list(thread_id=thread.id)
+
         if messages.data:
-            latest_message = sorted(messages.data, key=lambda x: x.created_at, reverse=True)[0]
+            ai_response = messages.data[0].content[0].text.value.strip()
+
+            # Step 2: Modify the AI response to include clickable Instagram links
+            #ai_response = re.sub(r"@([a-zA-Z0-9_]+)", r'<a href="https://www.instagram.com/\1" target="_blank">@\1</a>', ai_response)
+            #ai_response = ai_response.replace("\n", "<br>")  # Keep line breaks
             
-            # ✅ Clean AI response by removing 【...†source】 patterns
-            ai_response = re.sub(r"【.*?†source】", "", latest_message.content[0].text.value).strip()
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
-        
+
         return jsonify({"response": ai_response})
 
     except Exception as e:
-        print(f"❌ Internal Server Error: {str(e)}")
         return jsonify({"response": f"Erro interno do servidor: {str(e)}"}), 500
 
 if __name__ == "__main__":
