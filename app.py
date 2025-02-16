@@ -68,6 +68,7 @@ def home():
 
 @app.route("/chat", methods=["POST"])
 def chat():
+    return jsonify({"response": "Hello, this is a test response!"})
     try:
         user_ip = request.remote_addr  
 
