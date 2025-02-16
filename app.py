@@ -38,6 +38,37 @@ CORS(app)
 #   return jsonify({'status': 'success'}), 200
 #------------------------------------
 
+import stripe
+import os
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+# ✅ Set Stripe API Key
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # Ensure this exists in Render Environment Variables
+WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")  # Webhook Secret from Stripe Dashboard
+
+@app.route('/webhook', methods=['POST'])
+def stripe_webhook():
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get('Stripe-Signature')
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
+    except ValueError:
+        return jsonify({'error': 'Invalid payload'}), 400
+    except stripe.error.SignatureVerificationError:
+        return jsonify({'error': 'Invalid signature'}), 400
+
+    # ✅ Handle relevant Stripe events
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        print(f"✅ Payment received for {session['amount_total']} cents!")
+        # TODO: Add logic to update the user's subscription in your database
+
+    return jsonify({'status': 'success'}), 200
+
+
 # ✅ OpenAI API Key and Assistant ID
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ASSISTANT_ID = os.getenv("ASSISTANT_ID")
