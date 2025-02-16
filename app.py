@@ -6,6 +6,13 @@ from flask_cors import CORS
 import re
 import stripe
 
+try:
+    import stripe
+    print("✅ Stripe is installed. Version:", stripe.__version__)
+except ImportError:
+    print("❌ Stripe is NOT installed.")
+
+
 app = Flask(__name__)
 CORS(app)
 
