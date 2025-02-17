@@ -1,3 +1,112 @@
+import openai
+import os
+import time
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import re
+import stripe
+
+try:
+    import stripe
+    print("✅ Stripe is installed and can be imported.")
+except ImportError:
+    print("❌ Stripe is NOT installed.")
+
+
+app = Flask(__name__)
+CORS(app)
+
+#------------------------------------
+
+# Set your Stripe secret key (store this securely)
+#stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # Use environment variables
+
+# Webhook secret (get this from Stripe Dashboard)
+#WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+#@app.route('/webhook', methods=['POST'])
+#def stripe_webhook():
+#    payload = request.get_data(as_text=True)
+#    sig_header = request.headers.get('Stripe-Signature')
+#
+#    try:
+#        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
+#    except ValueError:
+#        return jsonify({'error': 'Invalid payload'}), 400
+#    except stripe.error.SignatureVerificationError:
+#        return jsonify({'error': 'Invalid signature'}), 400
+#
+   # ✅ Handle successful checkout
+#    if event['type'] == 'checkout.session.completed':
+#       session = event['data']['object']
+#       print(f"✅ Payment received for {session['amount_total']} cents!")
+#       # TODO: Add logic to update the user’s subscription in your database
+#
+#   return jsonify({'status': 'success'}), 200
+#------------------------------------
+
+# ✅ Set Stripe API Key
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # Ensure this exists in Render Environment Variables
+WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")  # Webhook Secret from Stripe Dashboard
+
+@app.route('/webhook', methods=['POST'])
+def stripe_webhook():
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get('Stripe-Signature')
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
+    except ValueError:
+        return jsonify({'error': 'Invalid payload'}), 400
+    except stripe.error.SignatureVerificationError:
+        return jsonify({'error': 'Invalid signature'}), 400
+
+    # ✅ Handle relevant Stripe events
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        print(f"✅ Payment received for {session['amount_total']} cents!")
+        # TODO: Add logic to update the user's subscription in your database
+
+    return jsonify({'status': 'success'}), 200
+
+
+# ✅ OpenAI API Key and Assistant ID
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ASSISTANT_ID = os.getenv("ASSISTANT_ID")
+
+# ✅ Check if API keys exist
+if not OPENAI_API_KEY:
+    raise ValueError("⚠️ Error: OPENAI_API_KEY is not set. Make sure it is properly configured.")
+
+if not ASSISTANT_ID:
+    raise ValueError("⚠️ Error: ASSISTANT_ID is not set. Make sure it is properly configured.")
+
+# ✅ Initialize OpenAI Client
+client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+# ✅ Track user requests to limit abuse
+user_requests = {}
+
+def load_instructions():
+    with open('instructions.md','r',encoding='utf-8') as file:
+        return file.read()
+# Use regex to extract Instagram profiles
+#instagram_profiles = re.findall(r'\*\*([^*]+)\*\*: \[([^]]+)\]\((https://www.instagram.com/[^)]+)\)', content)
+
+# Convert the profile list into HTML format
+#profile_html = "<ul>"
+#for name, handle, url in instagram_profiles:
+#    profile_html += f'<li><a href="{url}" target="_blank">{name}</a> - {handle}</li>'
+#profile_html += "</ul>"
+
+#return content + "\n" + profile_html
+
+instructions = load_instructions()
+
+@app.route("/", methods=["GET"])
+def home():
+    return "Flask backend is running!", 200
+
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
@@ -40,14 +149,18 @@ def chat():
 
         # ✅ Create a new OpenAI Assistant thread
         thread = client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
+        # Limit to 3 most recent messages to avoid long conversations
+        messages = client.beta.threads.messages.list(thread_id=thread.id)
+        if len(messages.data) > 3:
+           messages.data = messages.data[-3:]
         print(f"✅ Thread created: {thread.id}")
 
-        # ✅ Start AI processing with **limited tokens** to control cost
+        # ✅ Start AI processing with **improved** instructions
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
-            instructions=instructions,  # ✅ Removed user_message from instructions to prevent repetition
-            tool_choice="auto"
+            instructions=f"Pergunta do usuário: {user_message}\n\n{instructions}",
+            tool_choice="auto",
         )
 
         print(f"⏳ Run started: {run.id}")
@@ -70,15 +183,10 @@ def chat():
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
 
-            # ✅ Limit AI response to 300 tokens
-            ai_response = " ".join(ai_response.split()[:300])
-
-            # ✅ Format text for better readability
-            ai_response = ai_response.replace("- ", "\n- ")  # Ensure list items appear on new lines
-            ai_response = ai_response.replace("**", "")  # Remove bold markers
-            ai_response = ai_response.replace(". ", ".\n\n")  # Add line breaks after sentences
-            ai_response = ai_response.replace(":", ":\n")  # Add new line after colons for lists
-
+            # Step 2: Modify the AI response to include clickable Instagram links
+            #ai_response = re.sub(r"@([a-zA-Z0-9_]+)", r'<a href="https://www.instagram.com/\1" target="_blank">@\1</a>', ai_response)
+            #ai_response = ai_response.replace("\n", "<br>")  # Keep line breaks
+            
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
@@ -86,3 +194,6 @@ def chat():
 
     except Exception as e:
         return jsonify({"response": f"Erro interno do servidor: {str(e)}"}), 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
