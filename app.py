@@ -160,8 +160,7 @@ def chat():
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
             instructions=f"Pergunta do usuário: {user_message}\n\n{instructions}",
-            tool_choice="auto",
-            max_tokens=300  # Limits response size to save cost
+            tool_choice="auto"
         )
 
         print(f"⏳ Run started: {run.id}")
@@ -183,7 +182,10 @@ def chat():
 
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
-
+            
+            # ✅ Limit AI response to 300 tokens
+            ai_response = " ".join(ai_response.split()[:300])  # Limits to ~300 token
+    
             # Step 2: Modify the AI response to include clickable Instagram links
             #ai_response = re.sub(r"@([a-zA-Z0-9_]+)", r'<a href="https://www.instagram.com/\1" target="_blank">@\1</a>', ai_response)
             #ai_response = ai_response.replace("\n", "<br>")  # Keep line breaks
