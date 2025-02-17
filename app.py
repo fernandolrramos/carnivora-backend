@@ -161,7 +161,6 @@ def chat():
             assistant_id=ASSISTANT_ID,
             instructions=f"Pergunta do usuário: {user_message}\n\n{instructions}",
             tool_choice="auto",
-            max_tokens=300  # Limits response size to save cost
         )
 
         print(f"⏳ Run started: {run.id}")
