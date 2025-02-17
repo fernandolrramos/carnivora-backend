@@ -182,6 +182,9 @@ def chat():
 
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
+
+            # ✅ Remove unwanted special characters like "【4:0†?"
+            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Removes 【 】 † ? and square brackets if present
         
             # ✅ Limit AI response to 300 tokens
             ai_response = " ".join(ai_response.split()[:300])
