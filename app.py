@@ -180,17 +180,11 @@ def chat():
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
         
-            # ✅ Limit AI response to ~300 tokens
-            ai_response = " ".join(ai_response.split()[:300])
+            # ✅ Limit AI response to 300 tokens
+            ai_response = " ".join(ai_response.split()[:300])  # Limits to ~300 tokens
         
-            # ✅ Format text for better readability
-            ai_response = ai_response.replace("- ", "\n- ")  # Ensure list items appear on new lines
-            ai_response = ai_response.replace("**", "")  # Remove bold markers if needed
-            ai_response = ai_response.replace(". ", ".\n\n")  # Add paragraph breaks after sentences
-            ai_response = ai_response.replace(":", ":\n")  # Add new line after colons for lists
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
-
 
         return jsonify({"response": ai_response})
 
