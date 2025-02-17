@@ -186,15 +186,14 @@ def chat():
             # ✅ Limit AI response to 300 tokens
             ai_response = " ".join(ai_response.split()[:300])
         
-            # ✅ Format text for better readability
-            ai_response = ai_response.replace("- ", "\n- ")  # Ensure list items appear on new lines
-            ai_response = ai_response.replace("**", "")  # Remove bold markers
+            # ✅ Ensure list items remain inline (Fix numbered lists appearing on their own line)
+            ai_response = re.sub(r"\n(\d+)\.\s+", r"\1. ", ai_response)  # Remove line break before numbers
         
-            # ✅ Ensure numbered lists remain inline
-            ai_response = re.sub(r"(\d+)\.\s+", r"\1. ", ai_response)  # Fixes numbered lists format
+            # ✅ Add a new line only after periods (`.`), avoiding breaking numbered lists
+            ai_response = re.sub(r"(?<!\d)\.\s+", ".\n\n", ai_response)  
         
-            # ✅ New lines only after periods
-            ai_response = re.sub(r"\.\s+", ".\n\n", ai_response)  # Add a new line only after periods
+            # ✅ Ensure bullet points appear correctly
+            ai_response = re.sub(r"-\s+", "\n- ", ai_response)  
         
             # ✅ Emoji Mapping: Place emoji **before** the word
             emoji_map = {
@@ -204,13 +203,9 @@ def chat():
                 "ovo": "🥚",
                 "queijo": "🧀",
                 "bacon": "🥓",
-                "dieta": "🥗",
                 "saúde": "💪",
-                "nutrientes": "🧬",
                 "energia": "⚡",
                 "proteína": "🍖",
-                "gordura": "🛢️",
-                "benefícios": "✅",
                 "alerta": "⚠️",
                 "importante": "❗"
             }
@@ -220,7 +215,6 @@ def chat():
         
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
-
 
         return jsonify({"response": ai_response})
 
