@@ -196,4 +196,8 @@ def chat():
         return jsonify({"response": f"Erro interno do servidor: {str(e)}"}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=8080)
+
+# ✅ Ensure Gunicorn finds the app instance
+application = app  # 🔥 Add this line
+
