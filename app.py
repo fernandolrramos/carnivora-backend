@@ -182,11 +182,38 @@ def chat():
 
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
-
-            # Step 2: Modify the AI response to include clickable Instagram links
-            #ai_response = re.sub(r"@([a-zA-Z0-9_]+)", r'<a href="https://www.instagram.com/\1" target="_blank">@\1</a>', ai_response)
-            #ai_response = ai_response.replace("\n", "<br>")  # Keep line breaks
-            
+        
+            # ✅ Limit AI response to 300 tokens
+            ai_response = " ".join(ai_response.split()[:300])
+        
+            # ✅ Format text for better readability
+            ai_response = ai_response.replace("- ", "\n- ")  # Ensure list items appear on new lines
+            ai_response = ai_response.replace("**", "")  # Remove bold markers
+            ai_response = ai_response.replace(". ", ".\n\n")  # Add line breaks after sentences
+            ai_response = ai_response.replace(":", ":\n")  # Add new line after colons for lists
+        
+            # ✅ Add Emojis based on Keywords
+            emoji_map = {
+                "carne": "🥩",
+                "frango": "🍗",
+                "peixe": "🐟",
+                "ovo": "🥚",
+                "queijo": "🧀",
+                "bacon": "🥓",
+                "dieta": "🥗",
+                "saúde": "💪",
+                "nutrientes": "🧬",
+                "energia": "⚡",
+                "proteína": "🍖",
+                "gordura": "🛢️",
+                "benefícios": "✅",
+                "alerta": "⚠️",
+                "importante": "❗"
+            }
+        
+            for word, emoji in emoji_map.items():
+                ai_response = ai_response.replace(word, f"{word} {emoji}")
+        
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
