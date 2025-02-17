@@ -182,19 +182,14 @@ def chat():
 
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
-        
+            
             # ✅ Limit AI response to 300 tokens
             ai_response = " ".join(ai_response.split()[:300])
-        
-            # ✅ Ensure list items remain inline (Fix numbered lists appearing on their own line)
-            #ai_response = re.sub(r"\n(\d+)\.\s+", r"\1. ", ai_response)  # Remove line break before numbers
-        
-            # ✅ Add a new line only after periods (`.`), avoiding breaking numbered lists
-            #ai_response = re.sub(r"(?<!\d)\.\s+", ".\n\n", ai_response)  
-        
-            # ✅ Ensure bullet points appear correctly
-            #ai_response = re.sub(r"-\s+", "\n- ", ai_response)  
-        
+
+            # Step 2: Modify the AI response to include clickable Instagram links
+            #ai_response = re.sub(r"@([a-zA-Z0-9_]+)", r'<a href="https://www.instagram.com/\1" target="_blank">@\1</a>', ai_response)
+            #ai_response = ai_response.replace("\n", "<br>")  # Keep line breaks
+            
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
