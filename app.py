@@ -189,10 +189,14 @@ def chat():
             # ✅ Format text for better readability
             ai_response = ai_response.replace("- ", "\n- ")  # Ensure list items appear on new lines
             ai_response = ai_response.replace("**", "")  # Remove bold markers
-            ai_response = ai_response.replace(". ", ".\n\n")  # Add line breaks after sentences
-            ai_response = ai_response.replace(":", ":\n")  # Add new line after colons for lists
         
-            # ✅ Add Emojis based on Keywords
+            # ✅ Ensure numbered lists remain inline
+            ai_response = re.sub(r"(\d+)\.\s+", r"\1. ", ai_response)  # Fixes numbered lists format
+        
+            # ✅ New lines only after periods
+            ai_response = re.sub(r"\.\s+", ".\n\n", ai_response)  # Add a new line only after periods
+        
+            # ✅ Emoji Mapping: Place emoji **before** the word
             emoji_map = {
                 "carne": "🥩",
                 "frango": "🍗",
@@ -212,10 +216,11 @@ def chat():
             }
         
             for word, emoji in emoji_map.items():
-                ai_response = ai_response.replace(word, f"{word} {emoji}")
+                ai_response = re.sub(rf"\b{word}\b", f"{emoji} {word}", ai_response, flags=re.IGNORECASE)
         
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
+
 
         return jsonify({"response": ai_response})
 
