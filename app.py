@@ -187,31 +187,13 @@ def chat():
             ai_response = " ".join(ai_response.split()[:300])
         
             # ✅ Ensure list items remain inline (Fix numbered lists appearing on their own line)
-            ai_response = re.sub(r"\n(\d+)\.\s+", r"\1. ", ai_response)  # Remove line break before numbers
+            #ai_response = re.sub(r"\n(\d+)\.\s+", r"\1. ", ai_response)  # Remove line break before numbers
         
             # ✅ Add a new line only after periods (`.`), avoiding breaking numbered lists
-            ai_response = re.sub(r"(?<!\d)\.\s+", ".\n\n", ai_response)  
+            #ai_response = re.sub(r"(?<!\d)\.\s+", ".\n\n", ai_response)  
         
             # ✅ Ensure bullet points appear correctly
-            ai_response = re.sub(r"-\s+", "\n- ", ai_response)  
-        
-            # ✅ Emoji Mapping: Place emoji **before** the word
-            emoji_map = {
-                "carne": "🥩",
-                "frango": "🍗",
-                "peixe": "🐟",
-                "ovo": "🥚",
-                "queijo": "🧀",
-                "bacon": "🥓",
-                "saúde": "💪",
-                "energia": "⚡",
-                "proteína": "🍖",
-                "alerta": "⚠️",
-                "importante": "❗"
-            }
-        
-            for word, emoji in emoji_map.items():
-                ai_response = re.sub(rf"\b{word}\b", f"{emoji} {word}", ai_response, flags=re.IGNORECASE)
+            #ai_response = re.sub(r"-\s+", "\n- ", ai_response)  
         
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
