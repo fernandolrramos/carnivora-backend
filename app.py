@@ -177,21 +177,20 @@ def chat():
 
             time.sleep(3)
 
-        # ✅ Retrieve AI response
-        messages = client.beta.threads.messages.list(thread_id=thread.id)
-
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
-            
-            # ✅ Limit AI response to 300 tokens
-            ai_response = " ".join(ai_response.split()[:300])  # Limits to ~300 token
-    
-            # Step 2: Modify the AI response to include clickable Instagram links
-            #ai_response = re.sub(r"@([a-zA-Z0-9_]+)", r'<a href="https://www.instagram.com/\1" target="_blank">@\1</a>', ai_response)
-            #ai_response = ai_response.replace("\n", "<br>")  # Keep line breaks
-            
+        
+            # ✅ Limit AI response to ~300 tokens
+            ai_response = " ".join(ai_response.split()[:300])
+        
+            # ✅ Format text for better readability
+            ai_response = ai_response.replace("- ", "\n- ")  # Ensure list items appear on new lines
+            ai_response = ai_response.replace("**", "")  # Remove bold markers if needed
+            ai_response = ai_response.replace(". ", ".\n\n")  # Add paragraph breaks after sentences
+            ai_response = ai_response.replace(":", ":\n")  # Add new line after colons for lists
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
+
 
         return jsonify({"response": ai_response})
 
