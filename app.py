@@ -197,6 +197,9 @@ def chat():
         
             # ✅ Ensure list items remain properly formatted
             ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Keep bullet points formatted
+
+            # ✅ Prevent "Dr." and similar abbreviations from triggering a new line
+            ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE)
             
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
