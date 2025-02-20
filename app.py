@@ -194,16 +194,21 @@ def chat():
         
             # ✅ Ensure each sentence appears on a new line
             #ai_response = re.sub(r"(?<!\d)\.\s+", ".\n\n", ai_response)  # Add new lines after periods (excluding decimal numbers)
-    
-            # ✅ Ensure each sentence appears on a new line, but keep numbered lists together
-            ai_response = re.sub(r"(?<!\d)\.\s+", ".\n\n", ai_response)  # Add a new line after normal sentences, ignoring decimal numbers
-            ai_response = re.sub(r"\n(\d+)\.\s+", r" \1. ", ai_response)  # Prevents numbered lists from breaking into a new line
+
+            # ✅ Prevent "Dr.", "Sr.", etc., from triggering a new line
+            ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE)
+            
+            # ✅ Ensure numbered lists remain inline and do NOT break into a new line
+            ai_response = re.sub(r"\n(\d+)\.\s*(\*\*?.+?\*\*?)", r" \1. \2", ai_response)  # Keeps numbered list and bold text in the same line
+            
+            # ✅ Ensure bullet points are correctly formatted
+            ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Keeps bullet points formatted properly
 
             # ✅ Ensure list items remain properly formatted
             ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Keep bullet points formatted
 
             # ✅ Prevent "Dr." and similar abbreviations from triggering a new line
-            ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE)
+            #ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE)
             
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
