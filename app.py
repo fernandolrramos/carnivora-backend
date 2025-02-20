@@ -193,8 +193,12 @@ def chat():
             ai_response = " ".join(ai_response.split()[:300])
         
             # ✅ Ensure each sentence appears on a new line
-            ai_response = re.sub(r"(?<!\d)\.\s+", ".\n\n", ai_response)  # Add new lines after periods (excluding decimal numbers)
-        
+            #ai_response = re.sub(r"(?<!\d)\.\s+", ".\n\n", ai_response)  # Add new lines after periods (excluding decimal numbers)
+    
+            # ✅ Ensure each sentence appears on a new line, but keep numbered lists together
+            ai_response = re.sub(r"(?<!\d)\.\s+", ".\n\n", ai_response)  # Add a new line after normal sentences, ignoring decimal numbers
+            ai_response = re.sub(r"\n(\d+)\.\s+", r" \1. ", ai_response)  # Prevents numbered lists from breaking into a new line
+
             # ✅ Ensure list items remain properly formatted
             ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Keep bullet points formatted
 
