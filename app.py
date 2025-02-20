@@ -199,7 +199,10 @@ def chat():
             ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE)
             
             # ✅ Ensure numbered lists remain inline and do NOT break into a new line
-            ai_response = re.sub(r"\n(\d+)\.\s*(\*\*?.+?\*\*?)", r" \1. \2", ai_response)  # Keeps numbered list and bold text in the same line
+            #ai_response = re.sub(r"\n(\d+)\.\s*(\*\*?.+?\*\*?)", r" \1. \2", ai_response)  # Keeps numbered list and bold text in the same line
+
+            # ✅ Replace numbered lists (1., 2., 3.) with a bullet point (•)
+            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)
             
             # ✅ Ensure bullet points are correctly formatted
             ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Keeps bullet points formatted properly
