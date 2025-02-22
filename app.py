@@ -135,12 +135,12 @@ def chat():
         if not user_message:
             return jsonify({"response": "Erro: Mensagem vazia recebida."}), 400
 
-        # ✅ Limit users to 50 requests per day
+        # ✅ Limit users to 10 requests per day
         if user_ip not in user_requests:
             user_requests[user_ip] = 0
 
-        if user_requests[user_ip] >= 50:
-            return jsonify({"response": "⚠️ Limite diário de 50 mensagens atingido. Tente novamente amanhã."}), 429
+        if user_requests[user_ip] >= 10:
+            return jsonify({"response": "⚠️ Limite diário de 10 mensagens atingido. Tente novamente amanhã."}), 429
 
         user_requests[user_ip] += 1
 
