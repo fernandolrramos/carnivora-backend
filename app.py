@@ -218,6 +218,10 @@ def chat():
         
             # ✅ Remove any other standalone URLs
             ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)
+
+            # ✅ Remove Markdown bold (**text**) and italics (*text*)
+            ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Removes bold
+            ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Removes italics
     
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
