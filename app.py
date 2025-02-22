@@ -136,12 +136,17 @@ def chat():
             return jsonify({"response": "Erro: Mensagem vazia recebida."}), 400
 
         # ✅ Limit users to 10 requests per day
+        # Load the daily limit from an environment variable; default to 20 if not set
+        daily_limit = int(os.getenv("DAILY_MESSAGE_LIMIT", 20))
+        
         if user_ip not in user_requests:
             user_requests[user_ip] = 0
 
-        if user_requests[user_ip] >= 10:
-            return jsonify({"response": "⚠️ Limite diário de 10 mensagens atingido. Tente novamente amanhã."}), 429
-
+        if user_requests[user_ip] >= daily_limit:
+            return jsonify({
+                    "response": f"⚠️ Limite diário de {daily_limit} mensagens atingido. Tente novamente amanhã."
+                }), 429        
+        
         user_requests[user_ip] += 1
 
         # ✅ AI Assistant Instructions for Portuguese + Context Awareness
