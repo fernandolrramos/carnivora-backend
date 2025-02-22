@@ -212,7 +212,13 @@ def chat():
 
             # ✅ Prevent "Dr." and similar abbreviations from triggering a new line
             #ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE)
-            
+
+            # ✅ Remove Instagram links but keep usernames
+            ai_response = re.sub(r"\(https?:\/\/www\.instagram\.com\/[^\)]+\)", "", ai_response) 
+        
+            # ✅ Remove any other standalone URLs
+            ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)
+    
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
