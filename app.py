@@ -1,6 +1,7 @@
 import openai
 import os
 import time
+import sqlite3  # ✅ SQLite for persistent tracking
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import re
@@ -12,94 +13,61 @@ try:
 except ImportError:
     print("❌ Stripe is NOT installed.")
 
-
 app = Flask(__name__)
 CORS(app)
 
-#------------------------------------
+# ✅ Set up SQLite for request tracking
+conn = sqlite3.connect("requests.db", check_same_thread=False)
+cursor = conn.cursor()
 
-# Set your Stripe secret key (store this securely)
-#stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # Use environment variables
+# ✅ Create table to track user requests
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS request_limits (
+        ip TEXT PRIMARY KEY,
+        count INTEGER DEFAULT 0,
+        last_request TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+""")
+conn.commit()
 
-# Webhook secret (get this from Stripe Dashboard)
-#WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+# ✅ Functions to manage user requests
+def get_user_request_count(ip):
+    cursor.execute("SELECT count FROM request_limits WHERE ip = ?", (ip,))
+    result = cursor.fetchone()
+    return result[0] if result else 0
 
-#@app.route('/webhook', methods=['POST'])
-#def stripe_webhook():
-#    payload = request.get_data(as_text=True)
-#    sig_header = request.headers.get('Stripe-Signature')
-#
-#    try:
-#        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
-#    except ValueError:
-#        return jsonify({'error': 'Invalid payload'}), 400
-#    except stripe.error.SignatureVerificationError:
-#        return jsonify({'error': 'Invalid signature'}), 400
-#
-   # ✅ Handle successful checkout
-#    if event['type'] == 'checkout.session.completed':
-#       session = event['data']['object']
-#       print(f"✅ Payment received for {session['amount_total']} cents!")
-#       # TODO: Add logic to update the user’s subscription in your database
-#
-#   return jsonify({'status': 'success'}), 200
-#------------------------------------
+def increment_user_request(ip):
+    if get_user_request_count(ip) == 0:
+        cursor.execute("INSERT INTO request_limits (ip, count) VALUES (?, 1)", (ip,))
+    else:
+        cursor.execute("UPDATE request_limits SET count = count + 1 WHERE ip = ?", (ip,))
+    conn.commit()
 
-# ✅ Set Stripe API Key
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # Ensure this exists in Render Environment Variables
-WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")  # Webhook Secret from Stripe Dashboard
+def reset_user_requests():
+    cursor.execute("DELETE FROM request_limits")
+    conn.commit()
 
-@app.route('/webhook', methods=['POST'])
-def stripe_webhook():
-    payload = request.get_data(as_text=True)
-    sig_header = request.headers.get('Stripe-Signature')
+# ✅ Route to manually reset limits (use a cron job to automate this)
+@app.route("/reset_limits", methods=["POST"])
+def reset_limits():
+    reset_user_requests()
+    return jsonify({"status": "success", "message": "Request limits reset."})
 
-    try:
-        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
-    except ValueError:
-        return jsonify({'error': 'Invalid payload'}), 400
-    except stripe.error.SignatureVerificationError:
-        return jsonify({'error': 'Invalid signature'}), 400
-
-    # ✅ Handle relevant Stripe events
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        print(f"✅ Payment received for {session['amount_total']} cents!")
-        # TODO: Add logic to update the user's subscription in your database
-
-    return jsonify({'status': 'success'}), 200
-
-
-# ✅ OpenAI API Key and Assistant ID
+# ✅ Load environment variables
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ASSISTANT_ID = os.getenv("ASSISTANT_ID")
+DAILY_LIMIT = int(os.getenv("DAILY_MESSAGE_LIMIT", 20))  # Default 20 if not set
 
-# ✅ Check if API keys exist
-if not OPENAI_API_KEY:
-    raise ValueError("⚠️ Error: OPENAI_API_KEY is not set. Make sure it is properly configured.")
+if not OPENAI_API_KEY or not ASSISTANT_ID:
+    raise ValueError("⚠️ Missing OpenAI credentials. Check environment variables.")
 
-if not ASSISTANT_ID:
-    raise ValueError("⚠️ Error: ASSISTANT_ID is not set. Make sure it is properly configured.")
-
-# ✅ Initialize OpenAI Client
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
-# ✅ Track user requests to limit abuse
-user_requests = {}
-
 def load_instructions():
-    with open('instructions.md','r',encoding='utf-8') as file:
+    with open('instructions.md', 'r', encoding='utf-8') as file:
         return file.read()
-# Use regex to extract Instagram profiles
-#instagram_profiles = re.findall(r'\*\*([^*]+)\*\*: \[([^]]+)\]\((https://www.instagram.com/[^)]+)\)', content)
-
-# Convert the profile list into HTML format
-#profile_html = "<ul>"
-#for name, handle, url in instagram_profiles:
-#    profile_html += f'<li><a href="{url}" target="_blank">{name}</a> - {handle}</li>'
-#profile_html += "</ul>"
-
-#return content + "\n" + profile_html
 
 instructions = load_instructions()
 
@@ -111,56 +79,29 @@ def home():
 def chat():
     try:
         user_ip = request.remote_addr  
+        user_count = get_user_request_count(user_ip)
 
-        # ✅ Safely decode request body to avoid Unicode errors
-        try:
-            raw_data = request.data.decode("utf-8", errors="ignore")
-        except Exception as e:
-            print(f"❌ Decoding Error: {e}")
-            return jsonify({"response": "Erro: Falha ao decodificar a mensagem."}), 400
-        
-        print("📩 Received Request!")
-        print("Request Data:", raw_data)
+        # ✅ Check daily request limit
+        if user_count >= DAILY_LIMIT:
+            return jsonify({"response": f"⚠️ Limite diário de {DAILY_LIMIT} mensagens atingido. Tente novamente amanhã."}), 429
 
+        increment_user_request(user_ip)  # ✅ Increment request count for the user
+
+        # ✅ Process AI request
         data = request.get_json(silent=True)
-
         if not data or "message" not in data:
             return jsonify({"response": "Erro: Nenhuma mensagem fornecida."}), 400
 
         user_message = data["message"].strip()
         if len(user_message) > 200:
-           user_message = user_message[:200] + "..."
+            user_message = user_message[:200] + "..."
 
-        # ✅ Ensure the message is correctly formatted
-        if not user_message:
-            return jsonify({"response": "Erro: Mensagem vazia recebida."}), 400
-
-        # ✅ Limit users to 10 requests per day
-        # Load the daily limit from an environment variable; default to 20 if not set
-        daily_limit = int(os.getenv("DAILY_MESSAGE_LIMIT", 20))
-        
-        if user_ip not in user_requests:
-            user_requests[user_ip] = 0
-
-        if user_requests[user_ip] >= daily_limit:
-            return jsonify({
-                    "response": f"⚠️ Limite diário de {daily_limit} mensagens atingido. Tente novamente amanhã."
-                }), 429        
-        
-        user_requests[user_ip] += 1
-
-        # ✅ AI Assistant Instructions for Portuguese + Context Awareness
-        instructions = load_instructions()
-
-        # ✅ Create a new OpenAI Assistant thread
         thread = client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
-        # Limit to 3 most recent messages to avoid long conversations
         messages = client.beta.threads.messages.list(thread_id=thread.id)
-        if len(messages.data) > 3:
-           messages.data = messages.data[-3:]
-        print(f"✅ Thread created: {thread.id}")
 
-        # ✅ Start AI processing with **improved** instructions
+        if len(messages.data) > 3:
+            messages.data = messages.data[-3:]
+
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
@@ -168,66 +109,44 @@ def chat():
             tool_choice="auto",
         )
 
-        print(f"⏳ Run started: {run.id}")
-
-        # ✅ Wait for AI response
         while True:
             run_status = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-            print(f"Checking run status: {run_status.status}")
-
             if run_status.status == "completed":
                 break
             elif run_status.status == "failed":
                 return jsonify({"response": "⚠️ Erro ao processar a resposta do assistente."}), 500
-
             time.sleep(3)
 
-        # ✅ Retrieve AI response
         messages = client.beta.threads.messages.list(thread_id=thread.id)
 
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
 
-            # ✅ Remove unwanted special characters like 【4:0†? and other artifacts
-            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Removes symbols like 【 】 † ? and brackets
-        
-            # ✅ Remove numbers attached to words that look like citation markers (e.g., 4:4A)
-            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Removes patterns like 4:4A or 5:2B
-        
-            # ✅ Limit AI response to 300 tokens
-            ai_response = " ".join(ai_response.split()[:300])
-        
-            # ✅ Ensure each sentence appears on a new line
-            #ai_response = re.sub(r"(?<!\d)\.\s+", ".\n\n", ai_response)  # Add new lines after periods (excluding decimal numbers)
+            # ✅ Remove document names (e.g., "arquivo.pdf")
+            ai_response = re.sub(r"\b[A-Za-z0-9\s]+\.pdf\b", "", ai_response).strip()
 
-            # ✅ Prevent "Dr.", "Sr.", etc., from triggering a new line
-            ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE)
-            
-            # ✅ Ensure numbered lists remain inline and do NOT break into a new line
-            #ai_response = re.sub(r"\n(\d+)\.\s*(\*\*?.+?\*\*?)", r" \1. \2", ai_response)  # Keeps numbered list and bold text in the same line
+            # ✅ Remove unwanted artifacts
+            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)
 
-            # ✅ Replace numbered lists (1., 2., 3.) with a bullet point (•)
+            # ✅ Remove citation markers (e.g., 4:4A)
+            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)
+
+            # ✅ Format list items with symbols (instead of numbers)
             ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)
-            
-            # ✅ Ensure bullet points are correctly formatted
-            ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Keeps bullet points formatted properly
-
-            # ✅ Ensure list items remain properly formatted
-            ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Keep bullet points formatted
 
             # ✅ Prevent "Dr." and similar abbreviations from triggering a new line
-            #ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE)
+            ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE)
 
             # ✅ Remove Instagram links but keep usernames
-            ai_response = re.sub(r"\(https?:\/\/www\.instagram\.com\/[^\)]+\)", "", ai_response) 
-        
+            ai_response = re.sub(r"\(https?:\/\/www\.instagram\.com\/[^\)]+\)", "", ai_response)
+
             # ✅ Remove any other standalone URLs
             ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)
 
             # ✅ Remove Markdown bold (**text**) and italics (*text*)
-            ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Removes bold
-            ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Removes italics
-    
+            ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)
+            ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)
+
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
@@ -240,5 +159,4 @@ if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
 
 # ✅ Ensure Gunicorn finds the app instance
-application = app  # 🔥 Add this line
-
+application = app  # 🔥 Required for deployment
