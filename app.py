@@ -122,7 +122,8 @@ def chat():
             ai_response = messages.data[0].content[0].text.value.strip()
             
             # ✅ Shorten AI response and clean formatting
-            ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)  # Remove URLs
+            ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)  # Remove standalone URLs
+            ai_response = re.sub(r"\(@([A-Za-z0-9_.]+)\($", r"(@\1)", ai_response)  # Fix incomplete Instagram handles
             ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Remove bold
             ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Remove italics
             ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Removes symbols like 【 】 † ? and brackets
