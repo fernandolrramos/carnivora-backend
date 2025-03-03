@@ -39,6 +39,10 @@ def reset_usage():
         if user_usage[user_id]["date"] != today:
             del user_usage[user_id]
 
+def load_instructions():
+    with open('instructions.md','r',encoding='utf-8') as file:
+        return file.read()
+
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
@@ -69,13 +73,15 @@ def chat():
             if time_since_last < COOLDOWN_TIME:
                 return jsonify({"response": f"⏳ Aguarde {COOLDOWN_TIME - int(time_since_last)} segundos antes de enviar outra mensagem."}), 429
 
+        instructions = load_instructions()
+        
         thread = client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
         messages = client.beta.threads.messages.list(thread_id=thread.id)
 
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
-            instructions=f"Pergunta do usuário: {user_message}",
+            instructions=f"Pergunta do usuário: {user_message}\n\n{instructions}",
             tool_choice="auto",
         )
 
@@ -104,20 +110,8 @@ def chat():
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
-        input_tokens = len(user_message.split()) * 1.3
-        output_tokens = len(ai_response.split()) * 1.3
-
-        input_cost = input_tokens * TOKEN_PRICING["input"]
-        output_cost = output_tokens * TOKEN_PRICING["output"]
-        total_cost = input_cost + output_cost
-
-        user_usage[user_id]["tokens"] += (input_tokens + output_tokens)
-        user_usage[user_id]["cost"] += total_cost
         user_usage[user_id]["messages"] += 1
         user_usage[user_id]["last_message_time"] = datetime.utcnow()
-
-        if user_usage[user_id]["cost"] >= DAILY_LIMIT:
-            return jsonify({"response": f"⚠️ Você atingiu o limite diário de ${DAILY_LIMIT:.2f}. Tente novamente amanhã."}), 429
 
         return jsonify({"response": ai_response})
 
