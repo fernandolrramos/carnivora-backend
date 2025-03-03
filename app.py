@@ -4,6 +4,7 @@ import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import re
+import stripe
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -20,6 +21,29 @@ if not ASSISTANT_ID:
 
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
+# ✅ Stripe Configuration
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+@app.route('/webhook', methods=['POST'])
+def stripe_webhook():
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get('Stripe-Signature')
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
+    except ValueError:
+        return jsonify({'error': 'Invalid payload'}), 400
+    except stripe.error.SignatureVerificationError:
+        return jsonify({'error': 'Invalid signature'}), 400
+
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        print(f"✅ Payment received for {session['amount_total']} cents!")
+        # TODO: Add logic to update the user's subscription in your database
+
+    return jsonify({'status': 'success'}), 200
+
 # ✅ Token pricing for GPT-4-Turbo
 TOKEN_PRICING = {
     "input": 0.01 / 1000,  # $0.01 per 1,000 input tokens
@@ -30,7 +54,7 @@ TOKEN_PRICING = {
 user_usage = {}  # { "user_id": {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": "YYYY-MM-DD"} }
 DAILY_LIMIT = 0.50  # $0.50 per user per day
 MESSAGE_LIMIT = 20  # 20 messages per user per day
-COOLDOWN_TIME = 15  # 15 seconds between messages
+COOLDOWN_TIME = 5  # 5 seconds between messages
 
 def reset_usage():
     """Resets usage data daily."""
@@ -52,7 +76,7 @@ def chat():
             return jsonify({"response": "Erro: Nenhuma mensagem fornecida ou usuário não identificado."}), 400
 
         user_id = data["user_id"].strip()
-        user_message = data["message"].strip()[:200]
+        user_message = data["message"].strip()[:150]  # Shorter messages
         today = datetime.utcnow().strftime("%Y-%m-%d")
 
         if user_id not in user_usage:
@@ -97,16 +121,18 @@ def chat():
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
             
-            # ✅ Clean AI response to remove unwanted formatting
-            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Removes symbols like 【 】 † ? and brackets
-            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Removes citation markers
-            ai_response = " ".join(ai_response.split()[:300])  # Limit response to 300 tokens
-            ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE)
-            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)  # Replace numbered lists with bullets
-            ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Ensure bullet points are formatted
-            ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)  # Remove standalone URLs
+            # ✅ Shorten AI response and clean formatting
+            ai_response = " ".join(ai_response.split()[:100])  # Limit response
+            ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)  # Remove URLs
             ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Remove bold
             ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Remove italics
+            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Removes symbols like 【 】 † ? and brackets
+            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Removes patterns like 4:4A or 5:2B
+            ai_response = " ".join(ai_response.split()[:300]) # ✅ Limit AI response to 300 tokens
+            ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE) # ✅ Prevent "Dr.", "Sr.", etc., from triggering a new line
+            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response) # ✅ Replace numbered lists (1., 2., 3.) with a bullet point (•)
+            ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Keeps bullet points formatted properly
+            ai_response = re.sub(r"\(https?:\/\/www\.instagram\.com\/[^\)]+\)", "", ai_response) 
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
