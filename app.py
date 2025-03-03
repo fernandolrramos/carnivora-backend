@@ -122,7 +122,6 @@ def chat():
             ai_response = messages.data[0].content[0].text.value.strip()
             
             # ✅ Shorten AI response and clean formatting
-            ai_response = " ".join(ai_response.split()[:100])  # Limit response
             ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)  # Remove URLs
             ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Remove bold
             ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Remove italics
