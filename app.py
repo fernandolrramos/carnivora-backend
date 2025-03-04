@@ -26,7 +26,7 @@ def get_user_plan(user_id):
     try:
         wix_api_url = "https://www.wixapis.com/members/get"  # Ajuste conforme necessário
         headers = {
-            "Authorization": "Bearer SEU_WIX_API_TOKEN",  # Trocar pelo token correto do Wix
+            "Authorization": "Bearer IST.eyJraWQiOiJQb3pIX2FDMiIsImFsZyI6IlJTMjU2In0.eyJkYXRhIjoie1wiaWRcIjpcIjkyZGFhYTBmLWNjZDMtNDAzZi04ZDk0LWRjZjdlZDQzYjQ1MlwiLFwiaWRlbnRpdHlcIjp7XCJ0eXBlXCI6XCJhcHBsaWNhdGlvblwiLFwiaWRcIjpcImE5MDRkZWQwLTYyMmEtNDUxZi04MmY3LWIyM2M1NWM4ZTU0OVwifSxcInRlbmFudFwiOntcInR5cGVcIjpcImFjY291bnRcIixcImlkXCI6XCJkYTZhY2Y5Yi1mOTE4LTQ3M2YtYjhjMC1mMWFkMzFmZTRhYmRcIn19IiwiaWF0IjoxNzQxMTE5MzE1fQ.hDycjChTBPvWnglZTP3YNetis0aBs00VdkQ0rVcZs9gFu6tD4Bm23ZUsTUeFp0e6Z-L-Eh8Zbfv7J8mvZpPCSGjiEFspo5kHOY9iAsQTzWjuSZSC9UPT7m4EwjUU52CFSYPcLTZvoKMdzGSMqomWkO68KNc0DdXQR4UQ8dTjfMrnF0LwhOi2osQlo6kHNqsxB6SWH9lUuTl8bI0ywMueywocXVO5XB4sc3_itt_65luyjDBFdOBNlWs8jAdTM2jThupCpF8J43iJR4B4FKeh8ZmkMYETIoJFX40gVzDXNWOkY5nIdxfQdlyyuI8qB3i9fYuOqFhOUpm4BeC-qBovQA",  # Trocar pelo token correto do Wix
             "Content-Type": "application/json"
         }
         response = requests.post(wix_api_url, headers=headers, json={"email": user_id})
