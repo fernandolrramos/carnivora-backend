@@ -99,6 +99,19 @@ def chat():
         messages = client.beta.threads.messages.list(thread_id=thread.id)
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
+
+            # ✅ Shorten AI response and clean formatting
+            ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)  # Remove standalone URLs
+            ai_response = re.sub(r"\(@([A-Za-z0-9_.]+)\($", r"(@\1)", ai_response)  # Fix incomplete Instagram handles
+            ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Remove bold
+            ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Remove italics
+            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Removes symbols like 【 】 † ? and brackets
+            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Removes patterns like 4:4A or 5:2B
+            ai_response = " ".join(ai_response.split()[:300]) # ✅ Limit AI response to 300 tokens
+            ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE) # ✅ Prevent "Dr.", "Sr.", etc., from triggering a new line
+            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response) # ✅ Replace numbered lists (1., 2., 3.) with a bullet point (•)
+            ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Keeps bullet points formatted properly
+            ai_response = re.sub(r"\(https?:\/\/www\.instagram\.com\/[^\)]+\)", "", ai_response) 
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
