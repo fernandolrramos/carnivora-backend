@@ -34,7 +34,7 @@ TOKEN_PRICING = {
 # ✅ Usage tracking (resets daily)
 user_usage = {}  # { "user_id": {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": "YYYY-MM-DD"} }
 DAILY_LIMIT = 0.50  # $0.50 per user per day
-MESSAGE_LIMIT = 30  # X messages per user per day
+MESSAGE_LIMIT = 100  # X messages per user per day
 COOLDOWN_TIME = 2  # X seconds between messages
 
 def reset_usage():
