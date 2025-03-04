@@ -7,6 +7,18 @@ import re
 import stripe
 from datetime import datetime, timedelta
 
+# ✅ Planos de Assinatura
+SUBSCRIPTION_PLANS = {
+    "basic": {
+        "daily_limit": 0.01,  # Exemplo: $0.01 de limite diário
+        "message_limit": 20,  # 20 mensagens por dia
+    },
+    "premium": {
+        "daily_limit": 0.03,  # Exemplo: $0.03 de limite diário (3x mais)
+        "message_limit": 60,  # 60 mensagens por dia
+    }
+}
+
 app = Flask(__name__)
 CORS(app)
 
