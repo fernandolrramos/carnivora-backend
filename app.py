@@ -6,6 +6,7 @@ from flask_cors import CORS
 import re
 import stripe
 from datetime import datetime, timedelta
+import requests  # Precisamos disso para chamar a API do Wix
 
 # ✅ Planos de Assinatura
 SUBSCRIPTION_PLANS = {
@@ -14,10 +15,28 @@ SUBSCRIPTION_PLANS = {
         "message_limit": 20,  # 20 mensagens por dia
     },
     "premium": {
-        "daily_limit": 0.03,  # Exemplo: $0.03 de limite diário (3x mais)
+        "daily_limit": 0.5,  # Exemplo: $0.03 de limite diário (3x mais)
         "message_limit": 60,  # 60 mensagens por dia
     }
 }
+
+# ✅ Função para buscar o plano de assinatura do usuário no Wix
+def get_user_plan(user_id):
+    """Busca o plano do usuário no Wix."""
+    try:
+        wix_api_url = "https://www.wixapis.com/members/get"  # Ajuste conforme necessário
+        headers = {
+            "Authorization": "Bearer SEU_WIX_API_TOKEN",  # Trocar pelo token correto do Wix
+            "Content-Type": "application/json"
+        }
+        response = requests.post(wix_api_url, headers=headers, json={"email": user_id})
+        data = response.json()
+
+        # Se houver um campo `subscriptionPlan` no Wix, retorna esse valor
+        return data.get("subscriptionPlan", "basic")  # Padrão "basic" se não encontrar
+    except Exception as e:
+        print("⚠️ Erro ao buscar plano no Wix:", str(e))
+        return "basic"  # Se houver erro, assume plano básico
 
 app = Flask(__name__)
 CORS(app)
@@ -45,8 +64,6 @@ TOKEN_PRICING = {
 
 # ✅ Usage tracking (resets daily)
 user_usage = {}  # { "user_id": {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": "YYYY-MM-DD"} }
-DAILY_LIMIT = 0.50  # $0.50 per user per day
-MESSAGE_LIMIT = 100  # X messages per user per day
 COOLDOWN_TIME = 2  # X seconds between messages
 
 def reset_usage():
@@ -72,25 +89,23 @@ def chat():
         user_message = data["message"].strip()[:150]  # Shorter messages
         today = datetime.utcnow().strftime("%Y-%m-%d")
 
+        # ✅ Obtém o plano do usuário a partir do Wix
+        user_plan = get_user_plan(user_id)
+        DAILY_LIMIT = SUBSCRIPTION_PLANS[user_plan]["daily_limit"]
+        MESSAGE_LIMIT = SUBSCRIPTION_PLANS[user_plan]["message_limit"]
+
         if user_id not in user_usage:
             user_usage[user_id] = {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": today}
 
         # ✅ Enforce daily message limit
         if user_usage[user_id]["messages"] >= MESSAGE_LIMIT:
-            #return jsonify({"response": f"⚠️ Você atingiu o limite diário de {MESSAGE_LIMIT} mensagens. Tente novamente amanhã."}), 429
-            return jsonify({"response": f"⚠️ Você atingiu o limite diário de mensagens. Tente novamente amanhã ou selecione outro plano de assinatura para continuar utilizando a IA Carnívora."}), 429
-            
+            return jsonify({"response": "⚠️ Você atingiu o limite diário de mensagens. Tente novamente amanhã ou selecione outro plano de assinatura para continuar utilizando a IA Carnívora."}), 429
+
         # ✅ Enforce daily cost limit
         if user_usage[user_id]["cost"] >= DAILY_LIMIT:
-            #return jsonify({"response": f"⚠️ Você atingiu o limite diário de ${DAILY_LIMIT:.2f}. Tente novamente amanhã."}), 429
-            return jsonify({"response": f"⚠️ Você atingiu o limite diário de mensagens. Tente novamente amanhã ou selecione outro plano de assinatura para continuar utilizando a IA Carnívora."}), 429
+            return jsonify({"response": "⚠️ Você atingiu o limite diário de mensagens. Tente novamente amanhã ou selecione outro plano de assinatura para continuar utilizando a IA Carnívora."}), 429
 
-        # ✅ Enforce cooldown time
-        last_message_time = user_usage[user_id]["last_message_time"]
-        if last_message_time:
-            time_since_last = (datetime.utcnow() - last_message_time).total_seconds()
-            if time_since_last < COOLDOWN_TIME:
-                return jsonify({"response": f"⏳ Aguarde {COOLDOWN_TIME - int(time_since_last)} segundos antes de enviar outra mensagem."}), 429
+        # ✅ Continua o processamento normal...
 
         instructions = load_instructions()
         
@@ -113,43 +128,17 @@ def chat():
         messages = client.beta.threads.messages.list(thread_id=thread.id)
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
-
+            
             # ✅ Shorten AI response and clean formatting
             ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)  # Remove standalone URLs
             ai_response = re.sub(r"\(@([A-Za-z0-9_.]+)\($", r"(@\1)", ai_response)  # Fix incomplete Instagram handles
             ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Remove bold
             ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Remove italics
-            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Removes symbols like 【 】 † ? and brackets
-            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Removes patterns like 4:4A or 5:2B
-            ai_response = " ".join(ai_response.split()[:300]) # ✅ Limit AI response to 300 tokens
-            ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE) # ✅ Prevent "Dr.", "Sr.", etc., from triggering a new line
-            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response) # ✅ Replace numbered lists (1., 2., 3.) with a bullet point (•)
-            ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Keeps bullet points formatted properly
-            ai_response = re.sub(r"\(https?:\/\/www\.instagram\.com\/[^\)]+\)", "", ai_response) 
+            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Remove symbols
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
-        # ✅ Retrieve token usage and cost calculation
-        run_details = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-        usage = run_details.usage
-        
-        if usage and hasattr(usage, "total_tokens"):
-            input_tokens = getattr(usage, "prompt_tokens", 0)
-            output_tokens = getattr(usage, "completion_tokens", 0)
-            cost = (input_tokens * TOKEN_PRICING["input"]) + (output_tokens * TOKEN_PRICING["output"])
-        else:
-            input_tokens = 0
-            output_tokens = 0
-            cost = 0.00
-
-        
-        # ✅ Update user usage tracking
-        user_usage[user_id]["tokens"] += input_tokens + output_tokens
-        user_usage[user_id]["cost"] += cost
-        user_usage[user_id]["messages"] += 1
-        user_usage[user_id]["last_message_time"] = datetime.utcnow()
-        
-        return jsonify({"response": ai_response, "tokens_used": input_tokens + output_tokens, "cost": round(cost, 4)})
+        return jsonify({"response": ai_response})
 
     except Exception as e:
         return jsonify({"response": f"Erro interno do servidor: {str(e)}"}), 500
