@@ -65,11 +65,13 @@ def chat():
 
         # ✅ Enforce daily message limit
         if user_usage[user_id]["messages"] >= MESSAGE_LIMIT:
-            return jsonify({"response": f"⚠️ Você atingiu o limite diário de {MESSAGE_LIMIT} mensagens. Tente novamente amanhã."}), 429
-
+            #return jsonify({"response": f"⚠️ Você atingiu o limite diário de {MESSAGE_LIMIT} mensagens. Tente novamente amanhã."}), 429
+            return jsonify({"response": f"⚠️ Você atingiu o limite diário de mensagens. Tente novamente amanhã ou selecione outro plano de assinatura para continuar utilizando a IA Carnívora."}), 429
+            
         # ✅ Enforce daily cost limit
         if user_usage[user_id]["cost"] >= DAILY_LIMIT:
-            return jsonify({"response": f"⚠️ Você atingiu o limite diário de ${DAILY_LIMIT:.2f}. Tente novamente amanhã."}), 429
+            #return jsonify({"response": f"⚠️ Você atingiu o limite diário de ${DAILY_LIMIT:.2f}. Tente novamente amanhã."}), 429
+            return jsonify({"response": f"⚠️ Você atingiu o limite diário de mensagens. Tente novamente amanhã ou selecione outro plano de assinatura para continuar utilizando a IA Carnívora."}), 429
 
         # ✅ Enforce cooldown time
         last_message_time = user_usage[user_id]["last_message_time"]
