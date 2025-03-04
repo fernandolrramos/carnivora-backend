@@ -29,7 +29,7 @@ def get_user_plan(user_id):
             "Authorization": "Bearer IST.eyJraWQiOiJQb3pIX2FDMiIsImFsZyI6IlJTMjU2In0.eyJkYXRhIjoie1wiaWRcIjpcIjE0ODEzYjZlLTYyYjItNGY2MS1iY2VhLWM5MTYyY2I5NGM4MVwiLFwiaWRlbnRpdHlcIjp7XCJ0eXBlXCI6XCJhcHBsaWNhdGlvblwiLFwiaWRcIjpcIjBiZjlmNjRlLTE0NDQtNGQxYy04ZWRmLTJmNjJhY2ZmNTllN1wifSxcInRlbmFudFwiOntcInR5cGVcIjpcImFjY291bnRcIixcImlkXCI6XCJkYTZhY2Y5Yi1mOTE4LTQ3M2YtYjhjMC1mMWFkMzFmZTRhYmRcIn19IiwiaWF0IjoxNzQxMTE5NzY3fQ.TqI8VbTKAcIDYqGvWMVt1EtjG0DuhowcB641q-0JN2KmLy1l4aGblOalUSu4v0JjBSx8OHvvVTDTeZqHe2hfCV3VFmu-30YRSKKav42GnA7vnvUZSOmULmRhoNzT5QH7NXEpAhjIR9oIHg7tksw4QSq4I9T9WXLhTL2vQy24sE6sxH4Ck6-NmElVnKpcpG_k2T4NQpU2PWkTlHqpbuNWRCt2uaZo1P2t14HIicvsdxNPzW7fwh6-8kGMW8wVGqbrR6JlGef7qdV4Dy9Yu3S7d9Wqco1lOcMCS8XHa0GwZfwqeEmtpawonzLnvWnsbuITSooYJ0APSKe_9YFj12Resg",  # Trocar pelo token correto do Wix
             "Content-Type": "application/json"
         }
-        response = requests.post(wix_api_url, headers=headers, json={"email": user_id})
+        response = requests.post(wix_api_url, headers=headers, json={"query": {"email": user_id}})
         data = response.json()
 
         plan = data.get("subscriptionPlan", "basic")  # Retorna "basic" se não encontrar
