@@ -119,14 +119,15 @@ def chat():
         run_details = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
         usage = run_details.usage
         
-        if usage:
-            input_tokens = usage.input_tokens
-            output_tokens = usage.output_tokens
+        if usage and hasattr(usage, "total_tokens"):
+            input_tokens = getattr(usage, "prompt_tokens", 0)
+            output_tokens = getattr(usage, "completion_tokens", 0)
             cost = (input_tokens * TOKEN_PRICING["input"]) + (output_tokens * TOKEN_PRICING["output"])
         else:
             input_tokens = 0
             output_tokens = 0
             cost = 0.00
+
         
         # ✅ Update user usage tracking
         user_usage[user_id]["tokens"] += input_tokens + output_tokens
