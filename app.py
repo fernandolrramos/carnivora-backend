@@ -6,39 +6,6 @@ from flask_cors import CORS
 import re
 import stripe
 from datetime import datetime, timedelta
-import requests  # Precisamos disso para chamar a API do Wix
-
-# ✅ Planos de Assinatura
-SUBSCRIPTION_PLANS = {
-    "basic": {
-        "daily_limit": 0.01,  # Exemplo: $0.01 de limite diário
-        "message_limit": 20,  # 20 mensagens por dia
-    },
-    "premium": {
-        "daily_limit": 0.5,  # Exemplo: $0.03 de limite diário (3x mais)
-        "message_limit": 60,  # 60 mensagens por dia
-    }
-}
-
-# ✅ Função para buscar o plano de assinatura do usuário no Wix
-def get_user_plan(user_id):
-    """Busca o plano do usuário no Wix."""
-    try:
-        wix_api_url = "https://www.wixapis.com/members/get"  # Ajuste conforme necessário
-        headers = {
-            "Authorization": "Bearer IST.eyJraWQiOiJQb3pIX2FDMiIsImFsZyI6IlJTMjU2In0.eyJkYXRhIjoie1wiaWRcIjpcIjE0ODEzYjZlLTYyYjItNGY2MS1iY2VhLWM5MTYyY2I5NGM4MVwiLFwiaWRlbnRpdHlcIjp7XCJ0eXBlXCI6XCJhcHBsaWNhdGlvblwiLFwiaWRcIjpcIjBiZjlmNjRlLTE0NDQtNGQxYy04ZWRmLTJmNjJhY2ZmNTllN1wifSxcInRlbmFudFwiOntcInR5cGVcIjpcImFjY291bnRcIixcImlkXCI6XCJkYTZhY2Y5Yi1mOTE4LTQ3M2YtYjhjMC1mMWFkMzFmZTRhYmRcIn19IiwiaWF0IjoxNzQxMTE5NzY3fQ.TqI8VbTKAcIDYqGvWMVt1EtjG0DuhowcB641q-0JN2KmLy1l4aGblOalUSu4v0JjBSx8OHvvVTDTeZqHe2hfCV3VFmu-30YRSKKav42GnA7vnvUZSOmULmRhoNzT5QH7NXEpAhjIR9oIHg7tksw4QSq4I9T9WXLhTL2vQy24sE6sxH4Ck6-NmElVnKpcpG_k2T4NQpU2PWkTlHqpbuNWRCt2uaZo1P2t14HIicvsdxNPzW7fwh6-8kGMW8wVGqbrR6JlGef7qdV4Dy9Yu3S7d9Wqco1lOcMCS8XHa0GwZfwqeEmtpawonzLnvWnsbuITSooYJ0APSKe_9YFj12Resg",  # Trocar pelo token correto do Wix
-            "Content-Type": "application/json"
-        }
-        response = requests.post(wix_api_url, headers=headers, json={"query": {"email": user_id}})
-        data = response.json()
-
-        plan = data.get("subscriptionPlan", "basic")  # Retorna "basic" se não encontrar
-
-        print(f"✅ Plano obtido do Wix para {user_id}: {plan}")  # Adicionando log para depuração
-        return plan
-    except Exception as e:
-        print(f"⚠️ Erro ao buscar plano no Wix para {user_id}: {str(e)}")
-        return "basic"  # Se houver erro, assume plano básico
 
 app = Flask(__name__)
 CORS(app)
@@ -58,6 +25,25 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
+@app.route('/webhook', methods=['POST'])
+def stripe_webhook():
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get('Stripe-Signature')
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
+    except ValueError:
+        return jsonify({'error': 'Invalid payload'}), 400
+    except stripe.error.SignatureVerificationError:
+        return jsonify({'error': 'Invalid signature'}), 400
+
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        print(f"✅ Payment received for {session['amount_total']} cents!")
+        # TODO: Add logic to update the user's subscription in your database
+
+    return jsonify({'status': 'success'}), 200
+
 # ✅ Token pricing for GPT-4-Turbo
 TOKEN_PRICING = {
     "input": 0.01 / 1000,  # $0.01 per 1,000 input tokens
@@ -66,7 +52,9 @@ TOKEN_PRICING = {
 
 # ✅ Usage tracking (resets daily)
 user_usage = {}  # { "user_id": {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": "YYYY-MM-DD"} }
-COOLDOWN_TIME = 2  # X seconds between messages
+DAILY_LIMIT = 0.01  # $0.50 per user per day
+MESSAGE_LIMIT = 10  # X messages per user per day
+COOLDOWN_TIME = 2  # 5 seconds between messages
 
 def reset_usage():
     """Resets usage data daily."""
@@ -91,29 +79,29 @@ def chat():
         user_message = data["message"].strip()[:150]  # Shorter messages
         today = datetime.utcnow().strftime("%Y-%m-%d")
 
-        # ✅ Obtém o plano do usuário a partir do Wix
-        user_plan = get_user_plan(user_id)
-        DAILY_LIMIT = SUBSCRIPTION_PLANS[user_plan]["daily_limit"]
-        MESSAGE_LIMIT = SUBSCRIPTION_PLANS[user_plan]["message_limit"]
-
-        print(f"🔹 {user_id} está no plano: {user_plan} (Limite diário: {DAILY_LIMIT}, Mensagens: {MESSAGE_LIMIT})")
-
         if user_id not in user_usage:
             user_usage[user_id] = {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": today}
 
         # ✅ Enforce daily message limit
         if user_usage[user_id]["messages"] >= MESSAGE_LIMIT:
-            return jsonify({"response": "⚠️ Você atingiu o limite diário de mensagens. Tente novamente amanhã ou selecione outro plano de assinatura para continuar utilizando a IA Carnívora."}), 429
+            return jsonify({"response": f"⚠️ Você atingiu o limite diário de {MESSAGE_LIMIT} mensagens. Tente novamente amanhã."}), 429
 
         # ✅ Enforce daily cost limit
         if user_usage[user_id]["cost"] >= DAILY_LIMIT:
-            return jsonify({"response": "⚠️ Você atingiu o limite diário de mensagens. Tente novamente amanhã ou selecione outro plano de assinatura para continuar utilizando a IA Carnívora."}), 429
+            return jsonify({"response": f"⚠️ Você atingiu o limite diário de ${DAILY_LIMIT:.2f}. Tente novamente amanhã."}), 429
 
-        # ✅ Continua o processamento normal...
+        # ✅ Enforce cooldown time
+        last_message_time = user_usage[user_id]["last_message_time"]
+        if last_message_time:
+            time_since_last = (datetime.utcnow() - last_message_time).total_seconds()
+            if time_since_last < COOLDOWN_TIME:
+                return jsonify({"response": f"⏳ Aguarde {COOLDOWN_TIME - int(time_since_last)} segundos antes de enviar outra mensagem."}), 429
 
         instructions = load_instructions()
         
         thread = client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
+        messages = client.beta.threads.messages.list(thread_id=thread.id)
+
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
@@ -138,9 +126,18 @@ def chat():
             ai_response = re.sub(r"\(@([A-Za-z0-9_.]+)\($", r"(@\1)", ai_response)  # Fix incomplete Instagram handles
             ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Remove bold
             ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Remove italics
-            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Remove symbols
+            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Removes symbols like 【 】 † ? and brackets
+            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Removes patterns like 4:4A or 5:2B
+            ai_response = " ".join(ai_response.split()[:300]) # ✅ Limit AI response to 300 tokens
+            ai_response = re.sub(r"(?<!Dr)(?<!Sr)(?<!Sra)(?<!Prof)(?<!etc)(?<!vs)\.\s+", ".\n\n", ai_response, flags=re.IGNORECASE) # ✅ Prevent "Dr.", "Sr.", etc., from triggering a new line
+            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response) # ✅ Replace numbered lists (1., 2., 3.) with a bullet point (•)
+            ai_response = re.sub(r"-\s+", "\n- ", ai_response)  # Keeps bullet points formatted properly
+            ai_response = re.sub(r"\(https?:\/\/www\.instagram\.com\/[^\)]+\)", "", ai_response) 
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
+
+        user_usage[user_id]["messages"] += 1
+        user_usage[user_id]["last_message_time"] = datetime.utcnow()
 
         return jsonify({"response": ai_response})
 
