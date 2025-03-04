@@ -32,10 +32,12 @@ def get_user_plan(user_id):
         response = requests.post(wix_api_url, headers=headers, json={"email": user_id})
         data = response.json()
 
-        # Se houver um campo `subscriptionPlan` no Wix, retorna esse valor
-        return data.get("subscriptionPlan", "basic")  # Padrão "basic" se não encontrar
+        plan = data.get("subscriptionPlan", "basic")  # Retorna "basic" se não encontrar
+
+        print(f"✅ Plano obtido do Wix para {user_id}: {plan}")  # Adicionando log para depuração
+        return plan
     except Exception as e:
-        print("⚠️ Erro ao buscar plano no Wix:", str(e))
+        print(f"⚠️ Erro ao buscar plano no Wix para {user_id}: {str(e)}")
         return "basic"  # Se houver erro, assume plano básico
 
 app = Flask(__name__)
@@ -93,6 +95,8 @@ def chat():
         user_plan = get_user_plan(user_id)
         DAILY_LIMIT = SUBSCRIPTION_PLANS[user_plan]["daily_limit"]
         MESSAGE_LIMIT = SUBSCRIPTION_PLANS[user_plan]["message_limit"]
+
+        print(f"🔹 {user_id} está no plano: {user_plan} (Limite diário: {DAILY_LIMIT}, Mensagens: {MESSAGE_LIMIT})")
 
         if user_id not in user_usage:
             user_usage[user_id] = {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": today}
