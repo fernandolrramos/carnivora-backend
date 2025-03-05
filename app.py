@@ -52,9 +52,9 @@ TOKEN_PRICING = {
 
 # ✅ Usage tracking (resets daily)
 user_usage = {}  # { "user_id": {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": "YYYY-MM-DD"} }
-DAILY_LIMIT = 0.05  # $0.01 por usuário por dia
-MESSAGE_LIMIT = 10  # 3 mensagens por dia
-COOLDOWN_TIME = 2  # 2 segundos entre mensagens
+DAILY_LIMIT = 0.5  # $X por usuário por dia
+MESSAGE_LIMIT = 20  #X mensagens por dia
+COOLDOWN_TIME = 5  #X segundos entre mensagens
 
 def reset_usage():
     """Resets usage data daily."""
@@ -127,7 +127,8 @@ def chat():
         
         # ✅ Bloquear se ultrapassar o limite de custo
         if new_cost >= DAILY_LIMIT:
-            return jsonify({"response": f"⚠️ Você atingiu o limite diário de ${DAILY_LIMIT:.2f}. Tente novamente amanhã."}), 429
+            #return jsonify({"response": f"⚠️ Você atingiu o limite diário de ${DAILY_LIMIT:.2f}. Tente novamente amanhã."}), 429
+            return jsonify({"response": f"⚠️ Você atingiu o limite diário de créditos. Tente novamente amanhã."}), 429
         
         # ✅ Atualizar rastreamento de uso
         user_usage[user_id]["tokens"] += total_tokens
