@@ -147,10 +147,15 @@ def chat():
             ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Remove símbolos especiais
             ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Remove padrões numéricos como 4:4A
             ai_response = " ".join(ai_response.split()[:300])  # Limita a 300 tokens
-            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)  # Substitui números (1., 2., 3.) por bullet points
+        
+            # ✅ Garante que listas numeradas e com traços sejam bullet points e adiciona quebras de linha corretas
+            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)  # Transforma listas numeradas em bullet points
+            ai_response = re.sub(r"(-\s+)", "\n• ", ai_response)  # Garante que traços também virem bullet points
+            ai_response = re.sub(r"(?<!\n)\•", "\n•", ai_response)  # Garante quebra de linha antes de bullet points soltos
+            ai_response = re.sub(r"(?<=[.!?])\s+", "\n\n", ai_response)  # Adiciona quebra de linha após cada frase
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
-            
+
         return jsonify({"response": ai_response, "tokens_used": total_tokens, "cost": round(new_cost, 4)})
 
     except Exception as e:
