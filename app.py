@@ -147,6 +147,7 @@ def chat():
             ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Remove símbolos especiais
             ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Remove padrões numéricos
             ai_response = " ".join(ai_response.split()[:300])  # Limita a 300 tokens
+            ai_response = re.sub(r"(?<=[.!?])\s+", "\n\n", ai_response)  # Adiciona parágrafos
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
