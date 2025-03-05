@@ -139,18 +139,18 @@ def chat():
         # ✅ Processar resposta do AI
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
-
+        
             # ✅ Limpeza e formatação da resposta
             ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)  # Remove URLs
             ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Remove bold
             ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Remove itálico
             ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Remove símbolos especiais
-            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Remove padrões numéricos
+            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Remove padrões numéricos como 4:4A
             ai_response = " ".join(ai_response.split()[:300])  # Limita a 300 tokens
-            ai_response = re.sub(r"(?<=[.!?])\s+", "\n\n", ai_response)  # Adiciona parágrafos
+            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)  # Substitui números (1., 2., 3.) por bullet points
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
-
+            
         return jsonify({"response": ai_response, "tokens_used": total_tokens, "cost": round(new_cost, 4)})
 
     except Exception as e:
