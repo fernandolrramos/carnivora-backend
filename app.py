@@ -52,7 +52,7 @@ TOKEN_PRICING = {
 
 # ✅ Usage tracking (resets daily)
 user_usage = {}  # { "user_id": {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": "YYYY-MM-DD"} }
-DAILY_LIMIT = 0.05  # $0.01 por usuário por dia
+DAILY_LIMIT = 0.01  # $0.01 por usuário por dia
 MESSAGE_LIMIT = 10  # 3 mensagens por dia
 COOLDOWN_TIME = 2  # 2 segundos entre mensagens
 
@@ -115,20 +115,20 @@ def chat():
         # ✅ Recuperar resposta e tokens usados
         messages = client.beta.threads.messages.list(thread_id=thread.id)
         run_details = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-        usage = run_details.usage if hasattr(run_details, "usage") else {}
-
-        input_tokens = usage.get("prompt_tokens", 0)
-        output_tokens = usage.get("completion_tokens", 0)
+        usage = getattr(run_details, "usage", {})  # Se não existir, retorna um dicionário vazio
+        
+        input_tokens = getattr(usage, "prompt_tokens", 0)
+        output_tokens = getattr(usage, "completion_tokens", 0)
         total_tokens = input_tokens + output_tokens
-
+        
         # ✅ Calcular custo real antes de permitir mensagem
         cost = (input_tokens * TOKEN_PRICING["input"]) + (output_tokens * TOKEN_PRICING["output"])
         new_cost = user_usage[user_id]["cost"] + cost
-
+        
         # ✅ Bloquear se ultrapassar o limite de custo
         if new_cost >= DAILY_LIMIT:
             return jsonify({"response": f"⚠️ Você atingiu o limite diário de ${DAILY_LIMIT:.2f}. Tente novamente amanhã."}), 429
-
+        
         # ✅ Atualizar rastreamento de uso
         user_usage[user_id]["tokens"] += total_tokens
         user_usage[user_id]["cost"] = new_cost  # Atualiza custo total
