@@ -148,11 +148,18 @@ def chat():
             ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Remove padrões numéricos como 4:4A
             ai_response = " ".join(ai_response.split()[:300])  # Limita a 300 tokens
         
-            # ✅ Garante que listas numeradas e com traços sejam bullet points e adiciona quebras de linha corretas
+            # ✅ Formatação das listas com bullet points e garantia de que nome e perfil fiquem juntos
             ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)  # Transforma listas numeradas em bullet points
             ai_response = re.sub(r"(-\s+)", "\n• ", ai_response)  # Garante que traços também virem bullet points
             ai_response = re.sub(r"(?<!\n)\•", "\n•", ai_response)  # Garante quebra de linha antes de bullet points soltos
             ai_response = re.sub(r"(?<=[.!?])\s+", "\n\n", ai_response)  # Adiciona quebra de linha após cada frase
+        
+            # ✅ Garante que @username e descrição fiquem na mesma linha
+            ai_response = re.sub(r"•\s*@(\w+)\s*\n\s*", r"• @\1 - ", ai_response)
+        
+            # ✅ Garante que "Dr." não fique isolado em uma linha separada
+            ai_response = re.sub(r"\bDr\.\s*\n\s*", "Dr. ", ai_response)
+        
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
