@@ -94,6 +94,13 @@ def update_user_chat_usage(email, tokens, cost, messages):
     if response.status_code != 200:
         print(f"⚠️ Erro ao atualizar usuário no Wix CMS: {response.json()}")
 
+def reset_usage():
+    """Resets usage data daily."""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    for user_id in list(user_usage.keys()):
+        if user_usage[user_id]["date"] != today:
+            del user_usage[user_id]
+
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
