@@ -26,10 +26,8 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
-#-----------------------------------------------------------------------------------
 # ✅ Configuração da API do Wix
 WIX_API_KEY = os.getenv("WIX_API_KEY")  # Salve a chave no ambiente
-#WIX_COLLECTION_URL = "https://www.wixapis.com/data/v2/collections/ChatUsage"
 WIX_COLLECTION_URL = "https://www.wixapis.com/data/v1/collections/ChatUsage"
 HEADERS = {
     "Authorization": f"Bearer {WIX_API_KEY}",
@@ -52,16 +50,16 @@ def get_user_chat_usage(email):
         }
     }
 
-    if response.status_code != 200:
-    print(f"⚠️ Erro ao buscar usuário no Wix CMS: {response.json()}")
-    
     response = requests.post(f"{WIX_COLLECTION_URL}/query", json=query_payload, headers=HEADERS)
+
+    if response.status_code != 200:
+        print(f"⚠️ Erro ao buscar usuário no Wix CMS: {response.json()}")
 
     if response.status_code == 200 and response.json().get("items"):
         return response.json()["items"][0]
     else:
         return None  # Nenhum dado encontrado
-#-----------------------------------------------------------------------------------
+
 def update_user_chat_usage(email, tokens, cost, messages):
     """ Atualiza os dados de uso do usuário no Wix CMS """
     today = datetime.utcnow().strftime("%Y-%m-%d")
@@ -69,10 +67,8 @@ def update_user_chat_usage(email, tokens, cost, messages):
     user_data = get_user_chat_usage(email)
     
     if user_data:
-        # ✅ Pega o ID do usuário no Wix
-        item_id = user_data["_id"]
+        item_id = user_data["_id"]  # ID necessário para atualizar os dados
 
-        # ✅ Atualiza os valores existentes
         updated_data = {
             "tokensUsados": user_data["tokensUsados"] + tokens,
             "custoTotal": user_data["custoTotal"] + cost,
@@ -80,18 +76,10 @@ def update_user_chat_usage(email, tokens, cost, messages):
             "ultimaMensagem": datetime.utcnow().isoformat()
         }
 
-        update_payload = {
-            "items": [{
-                "_id": item_id,  # Necessário para atualização
-                **updated_data
-            }]
-        }
-
+        update_payload = {"items": [{"_id": item_id, **updated_data}]}
         response = requests.patch(WIX_COLLECTION_URL, json=update_payload, headers=HEADERS)
 
-        return response.status_code == 200
     else:
-        # ✅ Criar um novo registro se não existir
         new_data = {
             "email": email,
             "tokensUsados": tokens,
@@ -102,54 +90,9 @@ def update_user_chat_usage(email, tokens, cost, messages):
         }
 
         response = requests.post(WIX_COLLECTION_URL, json={"items": [new_data]}, headers=HEADERS)
-        return response.status_code == 200
 
     if response.status_code != 200:
         print(f"⚠️ Erro ao atualizar usuário no Wix CMS: {response.json()}")
-
-#-----------------------------------------------------------------------------------
-
-@app.route('/webhook', methods=['POST'])
-def stripe_webhook():
-    payload = request.get_data(as_text=True)
-    sig_header = request.headers.get('Stripe-Signature')
-
-    try:
-        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
-    except ValueError:
-        return jsonify({'error': 'Invalid payload'}), 400
-    except stripe.error.SignatureVerificationError:
-        return jsonify({'error': 'Invalid signature'}), 400
-
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        print(f"✅ Payment received for {session['amount_total']} cents!")
-        # TODO: Add logic to update the user's subscription in your database
-
-    return jsonify({'status': 'success'}), 200
-
-# ✅ Token pricing for GPT-4-Turbo
-TOKEN_PRICING = {
-    "input": 0.01 / 1000,  # $0.01 per 1,000 input tokens
-    "output": 0.03 / 1000,  # $0.03 per 1,000 output tokens
-}
-
-# ✅ Usage tracking (resets daily)
-user_usage = {}  # { "user_id": {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": "YYYY-MM-DD"} }
-DAILY_LIMIT = 0.22  # $X por usuário por dia
-MESSAGE_LIMIT = 20  #X mensagens por dia
-COOLDOWN_TIME = 5  #X segundos entre mensagens
-
-def reset_usage():
-    """Resets usage data daily."""
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    for user_id in list(user_usage.keys()):
-        if user_usage[user_id]["date"] != today:
-            del user_usage[user_id]
-
-def load_instructions():
-    with open('instructions.md','r',encoding='utf-8') as file:
-        return file.read()
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -209,54 +152,33 @@ def chat():
         # ✅ Recuperar resposta e tokens usados
         messages = client.beta.threads.messages.list(thread_id=thread.id)
         run_details = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-        usage = getattr(run_details, "usage", {})  # Se não existir, retorna um dicionário vazio
-        
+        usage = getattr(run_details, "usage", {})
+
         input_tokens = getattr(usage, "prompt_tokens", 0)
         output_tokens = getattr(usage, "completion_tokens", 0)
         total_tokens = input_tokens + output_tokens
         
-        # ✅ Calcular custo real antes de permitir mensagem
         cost = (input_tokens * TOKEN_PRICING["input"]) + (output_tokens * TOKEN_PRICING["output"])
         new_cost = user_usage[user_id]["cost"] + cost
         
-        # ✅ Bloquear se ultrapassar o limite de custo
         if new_cost >= DAILY_LIMIT:
-            #return jsonify({"response": f"⚠️ Você atingiu o limite diário de ${DAILY_LIMIT:.2f}. Tente novamente amanhã."}), 429
             return jsonify({"response": f"⚠️ Você atingiu o limite diário de créditos. Tente novamente amanhã."}), 429
-        
-        # ✅ Atualizar rastreamento de uso
+
         update_user_chat_usage(user_id, total_tokens, cost, 1)
 
-        # ✅ Processar resposta do AI
+        # ✅ Processar resposta do AI mantendo formatação
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
-        
-            # ✅ Limpeza e formatação da resposta
-            ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)  # Remove URLs
-            ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Remove bold
-            ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Remove itálico
-            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Remove símbolos especiais
-            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Remove padrões numéricos como 4:4A
-            ai_response = " ".join(ai_response.split()[:300])  # Limita a 300 tokens
-        
-            # ✅ Formatação das listas com bullet points e garantia de que nome e perfil fiquem juntos
-            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)  # Transforma listas numeradas em bullet points
-            ai_response = re.sub(r"(-\s+)", "\n• ", ai_response)  # Garante que traços também virem bullet points
-            ai_response = re.sub(r"(?<!\n)\•", "\n•", ai_response)  # Garante quebra de linha antes de bullet points soltos
-            ai_response = re.sub(r"(?<=[.!?])\s+", "\n\n", ai_response)  # Adiciona quebra de linha após cada frase
-        
-            # ✅ Garante que @username e descrição fiquem na mesma linha
-            ai_response = re.sub(r"•\s*@(\w+)\s*\n\s*", r"• @\1 - ", ai_response)
-        
-            # ✅ Garante que "Dr." não fique isolado em uma linha separada
-            ai_response = re.sub(r"\bDr\.\s*\n\s*", "Dr. ", ai_response)
-        
-            # ✅ Remove bullet points vazios (linhas que só têm um "•")
-            ai_response = re.sub(r"\n•\s*\n", "\n", ai_response)
-        
-            # ✅ Remove bullet points que ficaram no final sem conteúdo
-            ai_response = re.sub(r"•\s*$", "", ai_response)
-        
+            ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)
+            ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)
+            ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)
+            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)
+            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)
+            ai_response = " ".join(ai_response.split()[:300])
+            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)
+            ai_response = re.sub(r"(-\s+)", "\n• ", ai_response)
+            ai_response = re.sub(r"(?<!\n)\•", "\n•", ai_response)
+            ai_response = re.sub(r"(?<=[.!?])\s+", "\n\n", ai_response)
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
