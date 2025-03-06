@@ -5,6 +5,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import re
 import stripe
+import requests
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -25,36 +26,85 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
-@app.route('/webhook', methods=['POST'])
-def stripe_webhook():
-    payload = request.get_data(as_text=True)
-    sig_header = request.headers.get('Stripe-Signature')
-
-    try:
-        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
-    except ValueError:
-        return jsonify({'error': 'Invalid payload'}), 400
-    except stripe.error.SignatureVerificationError:
-        return jsonify({'error': 'Invalid signature'}), 400
-
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        print(f"✅ Payment received for {session['amount_total']} cents!")
-        # TODO: Add logic to update the user's subscription in your database
-
-    return jsonify({'status': 'success'}), 200
-
-# ✅ Token pricing for GPT-4-Turbo
-TOKEN_PRICING = {
-    "input": 0.01 / 1000,  # $0.01 per 1,000 input tokens
-    "output": 0.03 / 1000,  # $0.03 per 1,000 output tokens
+# ✅ Configuração da API do Wix
+WIX_API_KEY = os.getenv("WIX_API_KEY")  # Salve a chave no ambiente
+WIX_COLLECTION_URL = "https://www.wixapis.com/data/v1/collections/ChatUsage"
+HEADERS = {
+    "Authorization": f"Bearer {WIX_API_KEY}",
+    "Content-Type": "application/json"
 }
 
-# ✅ Usage tracking (resets daily)
-user_usage = {}  # { "user_id": {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": "YYYY-MM-DD"} }
-DAILY_LIMIT = 0.22  # $X por usuário por dia
-MESSAGE_LIMIT = 20  #X mensagens por dia
-COOLDOWN_TIME = 5  #X segundos entre mensagens
+# ✅ Definição dos limites globais para controle de uso
+DAILY_LIMIT = 0.22  # Limite de custo diário ($)
+MESSAGE_LIMIT = 20  # Limite de mensagens por dia
+COOLDOWN_TIME = 5   # Tempo mínimo entre mensagens (segundos)
+
+# ✅ Dicionário global para rastrear o uso dos usuários
+user_usage = {}
+
+def get_user_chat_usage(email):
+    """ Obtém os dados de uso do usuário no Wix CMS """
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+
+    query_payload = {
+        "dataQuery": {
+            "filter": {
+                "operator": "and",
+                "predicates": [
+                    {"fieldName": "email", "operator": "eq", "value": email},
+                    {"fieldName": "dataReset", "operator": "eq", "value": today}
+                ]
+            }
+        }
+    }
+
+    response = requests.post(f"{WIX_COLLECTION_URL}/query", json=query_payload, headers=HEADERS)
+
+    if response.status_code != 200:
+        print(f"⚠️ Erro ao buscar usuário no Wix CMS: Código {response.status_code}, Resposta: {response.text}")
+        return None
+
+    try:
+        response_json = response.json()
+    except ValueError:
+        print(f"❌ Erro: Resposta inválida do Wix CMS. Resposta: {response.text}")
+        return None
+
+    if "items" in response_json and response_json["items"]:
+        return response_json["items"][0]
+    else:
+        return None
+
+def update_user_chat_usage(email, tokens, cost, messages):
+    """ Atualiza os dados de uso do usuário no Wix CMS """
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    
+    user_data = get_user_chat_usage(email)
+    
+    if user_data:
+        item_id = user_data["_id"]  # ID necessário para atualizar os dados
+
+        updated_data = {
+            "tokensUsados": user_data["tokensUsados"] + tokens,
+            "custoTotal": user_data["custoTotal"] + cost,
+            "mensagensEnviadas": user_data["mensagensEnviadas"] + messages,
+            "ultimaMensagem": datetime.utcnow().isoformat()
+        }
+
+        update_payload = {"items": [{"_id": item_id, **updated_data}]}
+        requests.patch(WIX_COLLECTION_URL, json=update_payload, headers=HEADERS)
+
+    else:
+        new_data = {
+            "email": email,
+            "tokensUsados": tokens,
+            "custoTotal": cost,
+            "mensagensEnviadas": messages,
+            "ultimaMensagem": datetime.utcnow().isoformat(),
+            "dataReset": today
+        }
+
+        requests.post(WIX_COLLECTION_URL, json={"items": [new_data]}, headers=HEADERS)
 
 def reset_usage():
     """Resets usage data daily."""
@@ -76,26 +126,27 @@ def chat():
             return jsonify({"response": "Erro: Nenhuma mensagem fornecida ou usuário não identificado."}), 400
 
         user_id = data["user_id"].strip()
-        user_message = data["message"].strip()[:150]  # Limita mensagem a 150 caracteres
+        user_message = data["message"].strip()[:150]
         today = datetime.utcnow().strftime("%Y-%m-%d")
 
-        if user_id not in user_usage:
+        user_data = get_user_chat_usage(user_id)
+        
+        if user_data:
+            user_usage[user_id] = {
+                "tokens": user_data["tokensUsados"],
+                "cost": user_data["custoTotal"],
+                "messages": user_data["mensagensEnviadas"],
+                "last_message_time": user_data["ultimaMensagem"],
+                "date": today
+            }
+        else:
             user_usage[user_id] = {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": today}
 
-        # ✅ Enforce daily message limit
         if user_usage[user_id]["messages"] >= MESSAGE_LIMIT:
-            return jsonify({"response": f"⚠️ Você atingiu o limite diário de {MESSAGE_LIMIT} mensagens. Tente novamente amanhã."}), 429
-
-        # ✅ Enforce cooldown time
-        last_message_time = user_usage[user_id]["last_message_time"]
-        if last_message_time:
-            time_since_last = (datetime.utcnow() - last_message_time).total_seconds()
-            if time_since_last < COOLDOWN_TIME:
-                return jsonify({"response": f"⏳ Aguarde {COOLDOWN_TIME - int(time_since_last)} segundos antes de enviar outra mensagem."}), 429
+            return jsonify({"response": f"⚠️ Você atingiu o limite diário de {MESSAGE_LIMIT} mensagens."}), 429
 
         instructions = load_instructions()
 
-        # ✅ Enviar mensagem para o OpenAI
         thread = client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
@@ -112,64 +163,22 @@ def chat():
                 return jsonify({"response": "⚠️ Erro ao processar a resposta do assistente."}), 500
             time.sleep(3)
 
-        # ✅ Recuperar resposta e tokens usados
         messages = client.beta.threads.messages.list(thread_id=thread.id)
-        run_details = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-        usage = getattr(run_details, "usage", {})  # Se não existir, retorna um dicionário vazio
-        
+        usage = getattr(run, "usage", {})
+
         input_tokens = getattr(usage, "prompt_tokens", 0)
         output_tokens = getattr(usage, "completion_tokens", 0)
         total_tokens = input_tokens + output_tokens
-        
-        # ✅ Calcular custo real antes de permitir mensagem
         cost = (input_tokens * TOKEN_PRICING["input"]) + (output_tokens * TOKEN_PRICING["output"])
-        new_cost = user_usage[user_id]["cost"] + cost
-        
-        # ✅ Bloquear se ultrapassar o limite de custo
-        if new_cost >= DAILY_LIMIT:
-            #return jsonify({"response": f"⚠️ Você atingiu o limite diário de ${DAILY_LIMIT:.2f}. Tente novamente amanhã."}), 429
-            return jsonify({"response": f"⚠️ Você atingiu o limite diário de créditos. Tente novamente amanhã."}), 429
-        
-        # ✅ Atualizar rastreamento de uso
-        user_usage[user_id]["tokens"] += total_tokens
-        user_usage[user_id]["cost"] = new_cost  # Atualiza custo total
-        user_usage[user_id]["messages"] += 1
-        user_usage[user_id]["last_message_time"] = datetime.utcnow()
 
-        # ✅ Processar resposta do AI
-        if messages.data:
-            ai_response = messages.data[0].content[0].text.value.strip()
-        
-            # ✅ Limpeza e formatação da resposta
-            ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)  # Remove URLs
-            ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Remove bold
-            ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Remove itálico
-            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Remove símbolos especiais
-            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Remove padrões numéricos como 4:4A
-            ai_response = " ".join(ai_response.split()[:300])  # Limita a 300 tokens
-        
-            # ✅ Formatação das listas com bullet points e garantia de que nome e perfil fiquem juntos
-            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)  # Transforma listas numeradas em bullet points
-            ai_response = re.sub(r"(-\s+)", "\n• ", ai_response)  # Garante que traços também virem bullet points
-            ai_response = re.sub(r"(?<!\n)\•", "\n•", ai_response)  # Garante quebra de linha antes de bullet points soltos
-            ai_response = re.sub(r"(?<=[.!?])\s+", "\n\n", ai_response)  # Adiciona quebra de linha após cada frase
-        
-            # ✅ Garante que @username e descrição fiquem na mesma linha
-            ai_response = re.sub(r"•\s*@(\w+)\s*\n\s*", r"• @\1 - ", ai_response)
-        
-            # ✅ Garante que "Dr." não fique isolado em uma linha separada
-            ai_response = re.sub(r"\bDr\.\s*\n\s*", "Dr. ", ai_response)
-        
-            # ✅ Remove bullet points vazios (linhas que só têm um "•")
-            ai_response = re.sub(r"\n•\s*\n", "\n", ai_response)
-        
-            # ✅ Remove bullet points que ficaram no final sem conteúdo
-            ai_response = re.sub(r"•\s*$", "", ai_response)
-        
-        else:
-            ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
+        if user_usage[user_id]["cost"] + cost >= DAILY_LIMIT:
+            return jsonify({"response": "⚠️ Você atingiu o limite diário de créditos."}), 429
 
-        return jsonify({"response": ai_response, "tokens_used": total_tokens, "cost": round(new_cost, 4)})
+        update_user_chat_usage(user_id, total_tokens, cost, 1)
+
+        ai_response = messages.data[0].content[0].text.value.strip() if messages.data else "⚠️ Erro: O assistente não retornou resposta válida."
+
+        return jsonify({"response": ai_response, "tokens_used": total_tokens, "cost": round(user_usage[user_id]['cost'] + cost, 4)})
 
     except Exception as e:
         return jsonify({"response": f"Erro interno do servidor: {str(e)}"}), 500
