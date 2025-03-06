@@ -160,6 +160,12 @@ def chat():
             # ✅ Garante que "Dr." não fique isolado em uma linha separada
             ai_response = re.sub(r"\bDr\.\s*\n\s*", "Dr. ", ai_response)
         
+            # ✅ Remove bullet points vazios (linhas que só têm um "•")
+            ai_response = re.sub(r"\n•\s*\n", "\n", ai_response)
+        
+            # ✅ Remove bullet points que ficaram no final sem conteúdo
+            ai_response = re.sub(r"•\s*$", "", ai_response)
+        
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
