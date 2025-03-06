@@ -158,13 +158,25 @@ def chat():
 
         instructions = load_instructions()
 
-        thread = client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
-        run = client.beta.threads.runs.create(
-            thread_id=thread.id,
-            assistant_id=ASSISTANT_ID,
-            instructions=f"Pergunta do usuário: {user_message}\n\n{instructions}",
-            tool_choice="auto",
-        )
+        # ✅ Aguarda a resposta da OpenAI corretamente
+        max_attempts = 10  # Limite de tentativas
+        attempts = 0
+        
+        while attempts < max_attempts:
+            run_status = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+            
+            if run_status.status == "completed":
+                break
+            elif run_status.status in ["failed", "cancelled"]:
+                return jsonify({"response": f"⚠️ O assistente falhou ao processar a resposta. Status: {run_status.status}"}), 500
+            elif run_status.status == "queued":
+                print(f"⏳ Resposta ainda na fila... Tentativa {attempts + 1}/{max_attempts}")
+            
+            attempts += 1
+            time.sleep(3)  # Espera 3 segundos antes de tentar de novo
+        
+        if run_status.status != "completed":
+            return jsonify({"response": f"⚠️ O assistente demorou muito para responder. Status final: {run_status.status}."}), 500
 
         # ✅ Processar resposta do AI mantendo formatação
         if run.status == "completed":
