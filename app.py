@@ -27,7 +27,8 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 # ✅ Configuração da API do Wix
-WIX_API_KEY = os.getenv("WIX_API_KEY")
+#WIX_API_KEY = os.getenv("WIX_API_KEY")
+WIX_API_KEY = "IST.eyJraWQiOiJQb3pIX2FDMiIsImFsZyI6IlJTMjU2In0.eyJkYXRhIjoie1wiaWRcIjpcImJkNTViMTZlLWZiZjEtNDUxYy1iM2EwLTMzNDYzOWFmMGM3OVwiLFwiaWRlbnRpdHlcIjp7XCJ0eXBlXCI6XCJhcHBsaWNhdGlvblwiLFwiaWRcIjpcIjE0ODYwMjc4LTUxMDAtNGM1YS1hZWY1LTA0NTA5ODEyNGMxMVwifSxcInRlbmFudFwiOntcInR5cGVcIjpcImFjY291bnRcIixcImlkXCI6XCJkYTZhY2Y5Yi1mOTE4LTQ3M2YtYjhjMC1mMWFkMzFmZTRhYmRcIn19IiwiaWF0IjoxNzQxMjkwMTQ2fQ.KIbaBda0kXCbJavO2QbHwWrdK1oKrjeQExqVeFS3zSxezIOM19uAjU4OiMtqL3QH2I_dA9a85BM7Wvn46ZVwC7T48Rwh_pc1SNZaUlzlJKyQ8E94KktouWwdf7m1Y7atbBUp4TXfYtISDynCa1ZddPsTXxqOQ6Q-uHKqAQUdoid9ZCTGO6b_5nzwmQdRAPmRXf76LWqMEzN1kmVvHco-cbhGRMtSHm-GpAtk0l10wG7Jqrpdbx6nOl5RT5Hn2A7A4cqC5qSApsSS9vVzXsHOTJxdQMQ6Ddk0b-5SU---IrZPEqCnTj7ui-zcQ8RW8n_jhnPJtnl4yznAOAseXIFtmw"
 WIX_COLLECTION_URL = "https://www.wixapis.com/data/v1/collections/ChatUsage"
 HEADERS = {
     "Authorization": f"Bearer {WIX_API_KEY}",
