@@ -42,7 +42,7 @@ TOKEN_PRICING = {
 
 # ✅ Definição dos limites de uso
 DAILY_LIMIT = 0.5  # Limite diário de custo ($)
-MESSAGE_LIMIT = 20  # Limite diário de mensagens
+MESSAGE_LIMIT = 1  # Limite diário de mensagens
 COOLDOWN_TIME = 5   # Tempo mínimo entre mensagens (segundos)
 
 # ✅ Dicionário para rastrear o uso dos usuários
