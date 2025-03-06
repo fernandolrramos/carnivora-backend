@@ -168,22 +168,30 @@ def chat():
 
         # ✅ Processar resposta do AI mantendo formatação
         if run.status == "completed":
-            messages = client.beta.threads.messages.list(thread_id=thread.id)
-            ai_response = messages.data[0].content[0].text.value.strip()
-
-            ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)
-            ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)
-            ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)
-            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)
-            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)
-            ai_response = " ".join(ai_response.split()[:300])
-            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)
-            ai_response = re.sub(r"(-\s+)", "\n• ", ai_response)
-            ai_response = re.sub(r"(?<!\n)\•", "\n•", ai_response)
-            ai_response = re.sub(r"(?<=[.!?])\s+", "\n\n", ai_response)
-
+            try:
+                messages = client.beta.threads.messages.list(thread_id=thread.id)
+                if messages and messages.data and len(messages.data) > 0:
+                    ai_response = messages.data[0].content[0].text.value.strip()
+                else:
+                    ai_response = "⚠️ O assistente não retornou uma resposta."
+        
+            except Exception as e:
+                ai_response = f"⚠️ Erro ao processar resposta da IA: {str(e)}"
+        
+            # ✅ Limpeza e formatação da resposta
+            ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)  # Remove URLs
+            ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)  # Remove bold
+            ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)  # Remove itálico
+            ai_response = re.sub(r"[【】\[\]†?]", "", ai_response)  # Remove símbolos especiais
+            ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Remove padrões numéricos
+            ai_response = " ".join(ai_response.split()[:300])  # Limita a 300 tokens
+            ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)  # Formatação bullet points
+            ai_response = re.sub(r"(-\s+)", "\n• ", ai_response)  # Formatação bullet points
+            ai_response = re.sub(r"(?<!\n)\•", "\n•", ai_response)  # Garantia de quebra de linha
+            ai_response = re.sub(r"(?<=[.!?])\s+", "\n\n", ai_response)  # Adiciona espaçamento entre frases
+        
         else:
-            ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
+            ai_response = "⚠️ O assistente não conseguiu gerar uma resposta no momento. Tente novamente."
 
         return jsonify({"response": ai_response})
 
