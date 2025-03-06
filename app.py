@@ -27,15 +27,28 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 # ✅ Configuração da API do Wix
-WIX_API_KEY = os.getenv("WIX_API_KEY")  # Salve a chave no ambiente
+WIX_API_KEY = os.getenv("WIX_API_KEY")
 WIX_COLLECTION_URL = "https://www.wixapis.com/data/v1/collections/ChatUsage"
 HEADERS = {
     "Authorization": f"Bearer {WIX_API_KEY}",
     "Content-Type": "application/json"
 }
 
+# ✅ Definição dos limites globais para controle de uso
+DAILY_LIMIT = 0.22  # Limite de custo diário ($)
+MESSAGE_LIMIT = 20  # Limite de mensagens por dia
+COOLDOWN_TIME = 5   # Tempo mínimo entre mensagens (segundos)
+
+# ✅ Dicionário global para rastrear o uso dos usuários
+user_usage = {}
+
+def load_instructions():
+    """Carrega as instruções do arquivo instructions.md"""
+    with open('instructions.md', 'r', encoding='utf-8') as file:
+        return file.read()
+
 def get_user_chat_usage(email):
-    """ Obtém os dados de uso do usuário do Wix CMS """
+    """Obtém os dados de uso do usuário do Wix CMS"""
     today = datetime.utcnow().strftime("%Y-%m-%d")
 
     query_payload = {
@@ -52,14 +65,13 @@ def get_user_chat_usage(email):
 
     response = requests.post(f"{WIX_COLLECTION_URL}/query", json=query_payload, headers=HEADERS)
 
-    # ✅ Verifica se a resposta da API está vazia ou tem erro
     if response.status_code != 200:
         print(f"⚠️ Erro ao buscar usuário no Wix CMS: Código {response.status_code}, Resposta: {response.text}")
         return None
 
     try:
         response_json = response.json()
-    except ValueError:  # Se a resposta não for JSON válido
+    except ValueError:
         print(f"❌ Erro: Resposta inválida do Wix CMS. Resposta: {response.text}")
         return None
 
@@ -70,13 +82,13 @@ def get_user_chat_usage(email):
         return None
 
 def update_user_chat_usage(email, tokens, cost, messages):
-    """ Atualiza os dados de uso do usuário no Wix CMS """
+    """Atualiza os dados de uso do usuário no Wix CMS"""
     today = datetime.utcnow().strftime("%Y-%m-%d")
     
     user_data = get_user_chat_usage(email)
     
     if user_data:
-        item_id = user_data["_id"]  # ID necessário para atualizar os dados
+        item_id = user_data["_id"]
 
         updated_data = {
             "tokensUsados": user_data["tokensUsados"] + tokens,
@@ -103,10 +115,8 @@ def update_user_chat_usage(email, tokens, cost, messages):
     if response.status_code != 200:
         print(f"⚠️ Erro ao atualizar usuário no Wix CMS: {response.json()}")
 
-user_usage = {}  # Dicionário para rastrear uso dos usuários
-
 def reset_usage():
-    """Resets usage data daily."""
+    """Reseta os dados de uso diariamente."""
     today = datetime.utcnow().strftime("%Y-%m-%d")
     for user_id in list(user_usage.keys()):
         if user_usage[user_id]["date"] != today:
@@ -121,7 +131,7 @@ def chat():
             return jsonify({"response": "Erro: Nenhuma mensagem fornecida ou usuário não identificado."}), 400
 
         user_id = data["user_id"].strip()
-        user_message = data["message"].strip()[:150]  # Limita mensagem a 150 caracteres
+        user_message = data["message"].strip()[:150]
         today = datetime.utcnow().strftime("%Y-%m-%d")
 
         user_data = get_user_chat_usage(user_id)
@@ -137,11 +147,9 @@ def chat():
         else:
             user_usage[user_id] = {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": today}
 
-        # ✅ Enforce daily message limit
         if user_usage[user_id]["messages"] >= MESSAGE_LIMIT:
             return jsonify({"response": f"⚠️ Você atingiu o limite diário de {MESSAGE_LIMIT} mensagens. Tente novamente amanhã."}), 429
 
-        # ✅ Enforce cooldown time
         last_message_time = user_usage[user_id]["last_message_time"]
         if last_message_time:
             time_since_last = (datetime.utcnow() - last_message_time).total_seconds()
@@ -150,7 +158,6 @@ def chat():
 
         instructions = load_instructions()
 
-        # ✅ Enviar mensagem para o OpenAI
         thread = client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
@@ -159,34 +166,11 @@ def chat():
             tool_choice="auto",
         )
 
-        while True:
-            run_status = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-            if run_status.status == "completed":
-                break
-            elif run_status.status == "failed":
-                return jsonify({"response": "⚠️ Erro ao processar a resposta do assistente."}), 500
-            time.sleep(3)
-
-        # ✅ Recuperar resposta e tokens usados
-        messages = client.beta.threads.messages.list(thread_id=thread.id)
-        run_details = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-        usage = getattr(run_details, "usage", {})
-
-        input_tokens = getattr(usage, "prompt_tokens", 0)
-        output_tokens = getattr(usage, "completion_tokens", 0)
-        total_tokens = input_tokens + output_tokens
-        
-        cost = (input_tokens * TOKEN_PRICING["input"]) + (output_tokens * TOKEN_PRICING["output"])
-        new_cost = user_usage[user_id]["cost"] + cost
-        
-        if new_cost >= DAILY_LIMIT:
-            return jsonify({"response": f"⚠️ Você atingiu o limite diário de créditos. Tente novamente amanhã."}), 429
-
-        update_user_chat_usage(user_id, total_tokens, cost, 1)
-
         # ✅ Processar resposta do AI mantendo formatação
-        if messages.data:
+        if run.status == "completed":
+            messages = client.beta.threads.messages.list(thread_id=thread.id)
             ai_response = messages.data[0].content[0].text.value.strip()
+
             ai_response = re.sub(r"https?:\/\/\S+", "", ai_response)
             ai_response = re.sub(r"\*\*(.*?)\*\*", r"\1", ai_response)
             ai_response = re.sub(r"\*(.*?)\*", r"\1", ai_response)
@@ -197,10 +181,11 @@ def chat():
             ai_response = re.sub(r"(-\s+)", "\n• ", ai_response)
             ai_response = re.sub(r"(?<!\n)\•", "\n•", ai_response)
             ai_response = re.sub(r"(?<=[.!?])\s+", "\n\n", ai_response)
+
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
 
-        return jsonify({"response": ai_response, "tokens_used": total_tokens, "cost": round(new_cost, 4)})
+        return jsonify({"response": ai_response})
 
     except Exception as e:
         return jsonify({"response": f"Erro interno do servidor: {str(e)}"}), 500
