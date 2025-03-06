@@ -94,6 +94,8 @@ def update_user_chat_usage(email, tokens, cost, messages):
     if response.status_code != 200:
         print(f"⚠️ Erro ao atualizar usuário no Wix CMS: {response.json()}")
 
+user_usage = {}  # Dicionário para rastrear uso dos usuários
+
 def reset_usage():
     """Resets usage data daily."""
     today = datetime.utcnow().strftime("%Y-%m-%d")
