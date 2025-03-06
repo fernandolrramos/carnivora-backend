@@ -170,10 +170,14 @@ def chat():
         if run.status == "completed":
             try:
                 messages = client.beta.threads.messages.list(thread_id=thread.id)
+        
+                # ✅ LOG: Exibir a resposta completa para debug
+                print("🔍 Debug: Resposta completa do OpenAI:", messages)
+        
                 if messages and messages.data and len(messages.data) > 0:
                     ai_response = messages.data[0].content[0].text.value.strip()
                 else:
-                    ai_response = "⚠️ O assistente não retornou uma resposta."
+                    ai_response = "⚠️ O assistente não retornou uma resposta válida."
         
             except Exception as e:
                 ai_response = f"⚠️ Erro ao processar resposta da IA: {str(e)}"
@@ -191,7 +195,7 @@ def chat():
             ai_response = re.sub(r"(?<=[.!?])\s+", "\n\n", ai_response)  # Adiciona espaçamento entre frases
         
         else:
-            ai_response = "⚠️ O assistente não conseguiu gerar uma resposta no momento. Tente novamente."
+            ai_response = f"⚠️ O assistente não conseguiu gerar uma resposta. Status: {run.status}. Tente novamente."
 
         return jsonify({"response": ai_response})
 
