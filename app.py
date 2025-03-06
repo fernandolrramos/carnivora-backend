@@ -52,13 +52,22 @@ def get_user_chat_usage(email):
 
     response = requests.post(f"{WIX_COLLECTION_URL}/query", json=query_payload, headers=HEADERS)
 
+    # ✅ Verifica se a resposta da API está vazia ou tem erro
     if response.status_code != 200:
-        print(f"⚠️ Erro ao buscar usuário no Wix CMS: {response.json()}")
+        print(f"⚠️ Erro ao buscar usuário no Wix CMS: Código {response.status_code}, Resposta: {response.text}")
+        return None
 
-    if response.status_code == 200 and response.json().get("items"):
-        return response.json()["items"][0]
+    try:
+        response_json = response.json()
+    except ValueError:  # Se a resposta não for JSON válido
+        print(f"❌ Erro: Resposta inválida do Wix CMS. Resposta: {response.text}")
+        return None
+
+    if "items" in response_json and response_json["items"]:
+        return response_json["items"][0]
     else:
-        return None  # Nenhum dado encontrado
+        print("⚠️ Nenhum dado encontrado para o usuário no Wix CMS.")
+        return None
 
 def update_user_chat_usage(email, tokens, cost, messages):
     """ Atualiza os dados de uso do usuário no Wix CMS """
