@@ -5,6 +5,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import re
 import stripe
+import requests
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -24,6 +25,89 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 # ✅ Stripe Configuration
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+#-----------------------------------------------------------------------------------
+# ✅ Configuração da API do Wix
+WIX_API_KEY = os.getenv("WIX_API_KEY")  # Salve a chave no ambiente
+#WIX_COLLECTION_URL = "https://www.wixapis.com/data/v2/collections/ChatUsage"
+WIX_COLLECTION_URL = "https://www.wixapis.com/data/v1/collections/ChatUsage"
+HEADERS = {
+    "Authorization": f"Bearer {WIX_API_KEY}",
+    "Content-Type": "application/json"
+}
+
+def get_user_chat_usage(email):
+    """ Obtém os dados de uso do usuário do Wix CMS """
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+
+    query_payload = {
+        "dataQuery": {
+            "filter": {
+                "operator": "and",
+                "predicates": [
+                    {"fieldName": "email", "operator": "eq", "value": email},
+                    {"fieldName": "dataReset", "operator": "eq", "value": today}
+                ]
+            }
+        }
+    }
+
+    if response.status_code != 200:
+    print(f"⚠️ Erro ao buscar usuário no Wix CMS: {response.json()}")
+    
+    response = requests.post(f"{WIX_COLLECTION_URL}/query", json=query_payload, headers=HEADERS)
+
+    if response.status_code == 200 and response.json().get("items"):
+        return response.json()["items"][0]
+    else:
+        return None  # Nenhum dado encontrado
+#-----------------------------------------------------------------------------------
+def update_user_chat_usage(email, tokens, cost, messages):
+    """ Atualiza os dados de uso do usuário no Wix CMS """
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    
+    user_data = get_user_chat_usage(email)
+    
+    if user_data:
+        # ✅ Pega o ID do usuário no Wix
+        item_id = user_data["_id"]
+
+        # ✅ Atualiza os valores existentes
+        updated_data = {
+            "tokensUsados": user_data["tokensUsados"] + tokens,
+            "custoTotal": user_data["custoTotal"] + cost,
+            "mensagensEnviadas": user_data["mensagensEnviadas"] + messages,
+            "ultimaMensagem": datetime.utcnow().isoformat()
+        }
+
+        update_payload = {
+            "items": [{
+                "_id": item_id,  # Necessário para atualização
+                **updated_data
+            }]
+        }
+
+        response = requests.patch(WIX_COLLECTION_URL, json=update_payload, headers=HEADERS)
+
+        return response.status_code == 200
+    else:
+        # ✅ Criar um novo registro se não existir
+        new_data = {
+            "email": email,
+            "tokensUsados": tokens,
+            "custoTotal": cost,
+            "mensagensEnviadas": messages,
+            "ultimaMensagem": datetime.utcnow().isoformat(),
+            "dataReset": today
+        }
+
+        response = requests.post(WIX_COLLECTION_URL, json={"items": [new_data]}, headers=HEADERS)
+        return response.status_code == 200
+
+    if response.status_code != 200:
+        print(f"⚠️ Erro ao atualizar usuário no Wix CMS: {response.json()}")
+
+#-----------------------------------------------------------------------------------
 
 @app.route('/webhook', methods=['POST'])
 def stripe_webhook():
@@ -79,7 +163,17 @@ def chat():
         user_message = data["message"].strip()[:150]  # Limita mensagem a 150 caracteres
         today = datetime.utcnow().strftime("%Y-%m-%d")
 
-        if user_id not in user_usage:
+        user_data = get_user_chat_usage(user_id)
+        
+        if user_data:
+            user_usage[user_id] = {
+                "tokens": user_data["tokensUsados"],
+                "cost": user_data["custoTotal"],
+                "messages": user_data["mensagensEnviadas"],
+                "last_message_time": user_data["ultimaMensagem"],
+                "date": today
+            }
+        else:
             user_usage[user_id] = {"tokens": 0, "cost": 0.00, "messages": 0, "last_message_time": None, "date": today}
 
         # ✅ Enforce daily message limit
@@ -131,10 +225,7 @@ def chat():
             return jsonify({"response": f"⚠️ Você atingiu o limite diário de créditos. Tente novamente amanhã."}), 429
         
         # ✅ Atualizar rastreamento de uso
-        user_usage[user_id]["tokens"] += total_tokens
-        user_usage[user_id]["cost"] = new_cost  # Atualiza custo total
-        user_usage[user_id]["messages"] += 1
-        user_usage[user_id]["last_message_time"] = datetime.utcnow()
+        update_user_chat_usage(user_id, total_tokens, cost, 1)
 
         # ✅ Processar resposta do AI
         if messages.data:
