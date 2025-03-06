@@ -27,19 +27,25 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 # ✅ Configuração da API do Wix
-WIX_API_KEY = os.getenv("WIX_API_KEY")  # Salve a chave no ambiente
+WIX_API_KEY = os.getenv("WIX_API_KEY")
 WIX_COLLECTION_URL = "https://www.wixapis.com/data/v1/collections/ChatUsage"
 HEADERS = {
     "Authorization": f"Bearer {WIX_API_KEY}",
     "Content-Type": "application/json"
 }
 
-# ✅ Definição dos limites globais para controle de uso
-DAILY_LIMIT = 0.22  # Limite de custo diário ($)
-MESSAGE_LIMIT = 20  # Limite de mensagens por dia
+# ✅ Preços de tokens para GPT-4-Turbo
+TOKEN_PRICING = {
+    "input": 0.01 / 1000,  # $0.01 por 1.000 tokens de entrada
+    "output": 0.03 / 1000,  # $0.03 por 1.000 tokens de saída
+}
+
+# ✅ Definição dos limites de uso
+DAILY_LIMIT = 0.22  # Limite diário de custo ($)
+MESSAGE_LIMIT = 20  # Limite diário de mensagens
 COOLDOWN_TIME = 5   # Tempo mínimo entre mensagens (segundos)
 
-# ✅ Dicionário global para rastrear o uso dos usuários
+# ✅ Dicionário para rastrear o uso dos usuários
 user_usage = {}
 
 def get_user_chat_usage(email):
@@ -70,10 +76,7 @@ def get_user_chat_usage(email):
         print(f"❌ Erro: Resposta inválida do Wix CMS. Resposta: {response.text}")
         return None
 
-    if "items" in response_json and response_json["items"]:
-        return response_json["items"][0]
-    else:
-        return None
+    return response_json["items"][0] if "items" in response_json and response_json["items"] else None
 
 def update_user_chat_usage(email, tokens, cost, messages):
     """ Atualiza os dados de uso do usuário no Wix CMS """
@@ -82,7 +85,7 @@ def update_user_chat_usage(email, tokens, cost, messages):
     user_data = get_user_chat_usage(email)
     
     if user_data:
-        item_id = user_data["_id"]  # ID necessário para atualizar os dados
+        item_id = user_data["_id"]
 
         updated_data = {
             "tokensUsados": user_data["tokensUsados"] + tokens,
