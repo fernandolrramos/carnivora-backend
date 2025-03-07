@@ -127,7 +127,6 @@ def chat():
         
         # ✅ Bloquear se ultrapassar o limite de custo
         if new_cost >= DAILY_LIMIT:
-            #return jsonify({"response": f"⚠️ Você atingiu o limite diário de ${DAILY_LIMIT:.2f}. Tente novamente amanhã."}), 429
             return jsonify({"response": f"⚠️ Você atingiu o limite diário de créditos. Tente novamente amanhã."}), 429
         
         # ✅ Atualizar rastreamento de uso
@@ -136,7 +135,7 @@ def chat():
         user_usage[user_id]["messages"] += 1
         user_usage[user_id]["last_message_time"] = datetime.utcnow()
 
-        # ✅ Processar resposta do AI
+        # ✅ Processar resposta do AI com a formatação correta
         if messages.data:
             ai_response = messages.data[0].content[0].text.value.strip()
         
@@ -148,7 +147,7 @@ def chat():
             ai_response = re.sub(r"\d+:\d+[A-Za-z]?", "", ai_response)  # Remove padrões numéricos como 4:4A
             ai_response = " ".join(ai_response.split()[:300])  # Limita a 300 tokens
         
-            # ✅ Formatação das listas com bullet points e garantia de que nome e perfil fiquem juntos
+            # ✅ Melhorando a formatação de listas e itens
             ai_response = re.sub(r"\n?\d+\.\s*", "\n• ", ai_response)  # Transforma listas numeradas em bullet points
             ai_response = re.sub(r"(-\s+)", "\n• ", ai_response)  # Garante que traços também virem bullet points
             ai_response = re.sub(r"(?<!\n)\•", "\n•", ai_response)  # Garante quebra de linha antes de bullet points soltos
@@ -160,11 +159,8 @@ def chat():
             # ✅ Garante que "Dr." não fique isolado em uma linha separada
             ai_response = re.sub(r"\bDr\.\s*\n\s*", "Dr. ", ai_response)
         
-            # ✅ Remove bullet points vazios (linhas que só têm um "•")
+            # ✅ Remove bullet points vazios
             ai_response = re.sub(r"\n•\s*\n", "\n", ai_response)
-        
-            # ✅ Remove bullet points que ficaram no final sem conteúdo
-            ai_response = re.sub(r"•\s*$", "", ai_response)
         
         else:
             ai_response = "⚠️ Erro: O assistente não retornou resposta válida."
