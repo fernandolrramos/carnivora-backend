@@ -25,6 +25,24 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
+#--------------------------
+@app.route('/get_user_info', methods=['GET'])
+def get_user_info():
+    """Retorna o e-mail do usuário logado, se disponível."""
+    
+    # Primeiro, tentamos recuperar o e-mail do cabeçalho da requisição
+    user_email = request.headers.get('X-User-Email')
+    
+    # Alternativa: Tenta recuperar via query string se não estiver no cabeçalho
+    if not user_email:
+        user_email = request.args.get('email')  # Exemplo: /get_user_info?email=usuario@email.com
+    
+    if not user_email:
+        return jsonify({"error": "Usuário não autenticado. O e-mail não foi enviado pelo Wix."}), 401
+
+    return jsonify({"email": user_email})
+#--------------------------
+
 @app.route('/webhook', methods=['POST'])
 def stripe_webhook():
     payload = request.get_data(as_text=True)
