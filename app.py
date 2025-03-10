@@ -29,14 +29,21 @@ WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 def stripe_webhook():
     payload = request.get_data(as_text=True)
     sig_header = request.headers.get('Stripe-Signature')
-
+    if not sig_header:
+        print("❌ Missing Stripe Signature")
+        return jsonify({'error': 'Missing Stripe Signature'}), 400
+        
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
-    except ValueError:
+        print(f"📩 Webhook event received: {event['type']}")
+    except ValueError as e:
+        print(f"❌ Invalid payload: {str(e)}")
         return jsonify({'error': 'Invalid payload'}), 400
-    except stripe.error.SignatureVerificationError:
+    except stripe.error.SignatureVerificationError as e:
+        print(f"❌ Invalid signature: {str(e)}")
         return jsonify({'error': 'Invalid signature'}), 400
 
+    # ✅ Handle specific Stripe events
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         print(f"✅ Payment received for {session['amount_total']} cents!")
